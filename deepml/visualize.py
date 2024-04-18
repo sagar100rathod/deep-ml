@@ -126,7 +126,7 @@ def show_images_from_folder(img_dir, images=None, open_file_func: Callable = Non
         else:
             images = files
 
-    open_file_func = Image.open if open_file_func is not None else open_file_func
+    open_file_func = Image.open if open_file_func is None else open_file_func
     image_generator = ((open_file_func(os.path.join(img_dir, file)), file, title_color)
                        for file in images)
     plot_images_with_title(image_generator, len(images), cols=cols, figsize=figsize)
@@ -153,7 +153,7 @@ def show_images_from_dataframe(dataframe, img_dir=None, image_file_name_column="
     :return: None
     """
     samples = dataframe.sample(samples)
-    open_file_func = Image.open if open_file_func is not None else open_file_func
+    open_file_func = Image.open if open_file_func is None else open_file_func
     image_generator = ((open_file_func(row_data[image_filepath_column]) if image_filepath_column else
                         open_file_func(os.path.join(img_dir, row_data[image_file_name_column])),
                         row_data[label_column], title_color)
