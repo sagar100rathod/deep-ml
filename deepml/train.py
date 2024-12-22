@@ -176,7 +176,7 @@ class Learner:
         with torch.no_grad():
             for batch_index, (x, y) in enumerate(loader):
 
-                outputs = self.__predictor.predict_batch(x, y, non_blocking)
+                outputs = self.__predictor.eval_step(x, y, non_blocking)
 
                 if isinstance(y, torch.Tensor):
                     y = y.to(self.__device)
@@ -243,7 +243,8 @@ class Learner:
     def fit(self, train_loader: torch.utils.data.DataLoader, val_loader: torch.utils.data.DataLoader = None,
             epochs: int = 10, steps_per_epoch: int = None,
             save_model_after_every_epoch: int = 5,
-            metrics: Dict[str, torch.nn.Module] = None, image_inverse_transform: Callable = None,
+            metrics: Dict[str, torch.nn.Module] = None,
+            image_inverse_transform: Callable = None,
             logger_img_size=Union[int, Tuple[int, int]],
             non_blocking=False):
 
@@ -326,7 +327,7 @@ class Learner:
                 if isinstance(y, torch.Tensor):
                     y = y.to(self.__device)
 
-                outputs = self.__predictor.predict_batch(x, y, non_blocking)
+                outputs = self.__predictor.train_step(x, y, non_blocking)
 
                 if isinstance(outputs, torch.Tensor) and outputs.ndim == 2 and outputs.shape[1] == 1:
                     y = y.view_as(outputs)
@@ -428,7 +429,7 @@ class Learner:
                 print('Iteration:', iteration + 1)
                 for x, y in tqdm(loader, total=len(loader), desc='Feature Extraction'):
 
-                    feature_set = self.__predictor.predict_batch(x).cpu().numpy()
+                    feature_set = self.__predictor.eval_step(x, y).cpu().numpy()
 
                     if target_known:
                         y = y.numpy().reshape(-1, 1)

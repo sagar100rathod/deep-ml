@@ -98,6 +98,14 @@ class Task(ABC):
         pass
 
     @abstractmethod
+    def train_step(self, x, y, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def eval_step(self, x, y, *args, **kwargs):
+        pass
+
+    @abstractmethod
     def predict(self, loader):
         pass
 
@@ -137,6 +145,12 @@ class NeuralNetTask(Task):
         x = self.move_input_to_device(x, **kwargs)
         return self._model(x)
 
+    def train_step(self, x, y, *args, **kwargs):
+        return self.predict_batch(x, y, *args, **kwargs)
+
+    def eval_step(self, x, y, *args, **kwargs):
+        return self.predict_batch(x, y, *args, **kwargs)
+
     def predict(self, loader: torch.utils.data.DataLoader):
         """
         Accepts torch data loader and performs prediction
@@ -151,7 +165,7 @@ class NeuralNetTask(Task):
         targets = []
         with torch.no_grad():
             for x, y in tqdm(loader, total=len(loader), desc="{:12s}".format('Prediction')):
-                y_pred = self.predict_batch(x)
+                y_pred = self.eval_step(x, y)
                 predictions.append(y_pred)
                 targets.append(y)
 
@@ -190,7 +204,7 @@ class NeuralNetTask(Task):
         bar = tqdm(total=len(loader), desc="{:12s}".format('Evaluation'))
         for batch_index, (x, y) in enumerate(loader):
 
-            outputs = self.predict_batch(x, y, non_blocking)
+            outputs = self.eval_step(x, y, non_blocking)
 
             if isinstance(y, torch.Tensor):
                 y = y.to(self._device)
@@ -296,7 +310,7 @@ class Segmentation(NeuralNetTask):
         self._model.eval()
         with torch.no_grad():
             for x, y in tqdm(loader, total=len(loader), desc="{:12s}".format('Prediction')):
-                y_pred = self.predict_batch(x).cpu()
+                y_pred = self.eval_step(x, y).cpu()
                 output_mask = self.transform_output(y_pred)
                 self._save_image_batch(output_mask, y, save_dir)
 
@@ -322,7 +336,7 @@ class Segmentation(NeuralNetTask):
 
         with torch.no_grad():
             x, targets = get_random_samples_batch_from_loader(loader, samples)
-            predictions = self.predict_batch(x).cpu()
+            predictions = self.eval_step(x, targets).cpu()
 
             x = self.transform_input(x, image_inverse_transform)
             target_mask = self.decode_segmentation_mask(targets)
@@ -410,7 +424,7 @@ class Segmentation(NeuralNetTask):
 
             with torch.no_grad():
                 x, targets = get_random_samples_batch_from_loader(loader)
-                predictions = self.predict_batch(x).cpu()
+                predictions = self.eval_step(x, targets).cpu()
 
                 x = self.transform_input(x, image_inverse_transform)
                 target_mask = self.decode_segmentation_mask(targets)
@@ -455,7 +469,7 @@ class ImageRegression(NeuralNetTask):
 
         with torch.no_grad():
             x, y = get_random_samples_batch_from_loader(loader, samples)
-            predictions = self.predict_batch(x)
+            predictions = self.eval_step(x, y)
 
             x = self.transform_input(x, image_inverse_transform)
             # #BCHW --> #BHWC
@@ -519,7 +533,7 @@ class ImageRegression(NeuralNetTask):
         self._model.eval()
         with torch.no_grad():
             x, targets = get_random_samples_batch_from_loader(loader)
-            predictions = self.predict_batch(x).cpu()
+            predictions = self.eval_step(x, targets).cpu()
 
             x, y = x.cpu(), targets.cpu()
             x = self.transform_input(x, image_inverse_transform)
@@ -631,7 +645,7 @@ class ImageClassification(NeuralNetTask):
 
         with torch.no_grad():
             x, targets = get_random_samples_batch_from_loader(loader, samples)
-            predictions = self.predict_batch(x).cpu()
+            predictions = self.eval_step(x, targets).cpu()
 
             x = self.transform_input(x, image_inverse_transform)
             # #BCHW --> #BHWC
@@ -670,7 +684,7 @@ class ImageClassification(NeuralNetTask):
         self._model.eval()
         with torch.no_grad():
             x, targets = get_random_samples_batch_from_loader(loader)
-            predictions = self.predict_batch(x).cpu()
+            predictions = self.eval_step(x, targets).cpu()
 
             x = self.transform_input(x).cpu()
             class_indices, probabilities = self.transform_output(predictions)
