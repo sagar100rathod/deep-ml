@@ -176,7 +176,7 @@ class Learner:
         with torch.no_grad():
             for batch_index, (x, y) in enumerate(loader):
 
-                outputs = self.__predictor.eval_step(x, y, non_blocking)
+                outputs, x, y = self.__predictor.eval_step(x, y, non_blocking)
 
                 if isinstance(y, torch.Tensor):
                     y = y.to(self.__device)
@@ -327,7 +327,7 @@ class Learner:
                 if isinstance(y, torch.Tensor):
                     y = y.to(self.__device)
 
-                outputs = self.__predictor.train_step(x, y, non_blocking)
+                outputs, x, y = self.__predictor.train_step(x, y, non_blocking)
 
                 if isinstance(outputs, torch.Tensor) and outputs.ndim == 2 and outputs.shape[1] == 1:
                     y = y.view_as(outputs)
@@ -429,7 +429,7 @@ class Learner:
                 print('Iteration:', iteration + 1)
                 for x, y in tqdm(loader, total=len(loader), desc='Feature Extraction'):
 
-                    feature_set = self.__predictor.eval_step(x, y).cpu().numpy()
+                    feature_set, x, y = self.__predictor.eval_step(x, y).cpu().numpy()
 
                     if target_known:
                         y = y.numpy().reshape(-1, 1)
