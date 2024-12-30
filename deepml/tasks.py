@@ -310,8 +310,8 @@ class Segmentation(NeuralNetTask):
         self._model.eval()
         with torch.no_grad():
             for x, y in tqdm(loader, total=len(loader), desc="{:12s}".format('Prediction')):
-                y_pred, x, y = self.eval_step(x, y).cpu()
-                output_mask = self.transform_output(y_pred)
+                y_pred, x, y = self.eval_step(x, y)
+                output_mask = self.transform_output(y_pred).cpu()
                 self._save_image_batch(output_mask, y, save_dir)
 
     def _save_image_batch(self, class_indices: torch.Tensor, filenames: List[str], save_dir: str):
@@ -424,11 +424,11 @@ class Segmentation(NeuralNetTask):
 
             with torch.no_grad():
                 x, targets = get_random_samples_batch_from_loader(loader)
-                predictions, x, targets = self.eval_step(x, targets).cpu()
+                predictions, x, targets = self.eval_step(x, targets)
 
                 x = self.transform_input(x, image_inverse_transform)
-                target_mask = self.decode_segmentation_mask(targets)
-                class_indices = self.transform_output(predictions)
+                target_mask = self.decode_segmentation_mask(targets.cpu())
+                class_indices = self.transform_output(predictions).cpu()
                 output_mask = self.decode_segmentation_mask(class_indices)
 
                 target_mask = target_mask.to(torch.uint8)
@@ -533,7 +533,7 @@ class ImageRegression(NeuralNetTask):
         self._model.eval()
         with torch.no_grad():
             x, targets = get_random_samples_batch_from_loader(loader)
-            predictions, x, targets = self.eval_step(x, targets).cpu()
+            predictions, x, targets = self.eval_step(x, targets)
 
             x, y = x.cpu(), targets.cpu()
             x = self.transform_input(x, image_inverse_transform)
@@ -645,7 +645,7 @@ class ImageClassification(NeuralNetTask):
 
         with torch.no_grad():
             x, targets = get_random_samples_batch_from_loader(loader, samples)
-            predictions, x, targets = self.eval_step(x, targets).cpu()
+            predictions, x, targets = self.eval_step(x, targets)
 
             x = self.transform_input(x, image_inverse_transform)
             # #BCHW --> #BHWC
@@ -684,7 +684,7 @@ class ImageClassification(NeuralNetTask):
         self._model.eval()
         with torch.no_grad():
             x, targets = get_random_samples_batch_from_loader(loader)
-            predictions, x, targets = self.eval_step(x, targets).cpu()
+            predictions, x, targets = self.eval_step(x, targets)
 
             x = self.transform_input(x).cpu()
             class_indices, probabilities = self.transform_output(predictions)
