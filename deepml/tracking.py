@@ -107,7 +107,7 @@ class WandbLogger(MLExperimentLogger):
             self.wandb.init(*kwargs)
 
     def log_params(self, **kwargs):
-        self.wandb.config.update(kwargs)
+        self.wandb.config.update(kwargs, allow_val_change=True)
 
     def log_metric(self, tag: str, value: Any, step: int):
         self.wandb.log({tag: value})
