@@ -12,19 +12,20 @@ from segmentation_models_pytorch.metrics.functional import (
 class ToClassIndex(torch.nn.Module):
     def __init__(self, mode: str ="binary", threshold:float = 0.5, activation=None):
 
-        if mode not in ["binary", "multiclass", "multilabel"]:
-            raise ValueError("mode should be either 'binary', 'multiclass' or 'multilabel' ")
-
-        if threshold and mode == "multiclass":
-            raise ValueError(f"threshold and mode={mode} cannot be used together")
-
-        if self.activation is None:
-            self.activation = torch.nn.Softmax2d() if self.mode == "multiclass" else torch.nn.Sigmoid()
-
         super(ToClassIndex, self).__init__()
         self.mode = mode
         self.activation = activation
         self.threshold = threshold
+
+        if self.mode not in ["binary", "multiclass", "multilabel"]:
+            raise ValueError("mode should be either 'binary', 'multiclass' or 'multilabel' ")
+
+        if self.threshold and self.mode == "multiclass":
+            raise ValueError(f"threshold and mode={self.mode} cannot be used together")
+
+        if self.activation is None:
+            self.activation = torch.nn.Softmax2d() if self.mode == "multiclass" else torch.nn.Sigmoid()
+
 
     def forward(self, output: torch.FloatTensor) -> torch.Tensor:
 
