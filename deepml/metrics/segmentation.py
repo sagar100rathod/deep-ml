@@ -9,40 +9,37 @@ from segmentation_models_pytorch.metrics.functional import (
 )
 
 
-class Binarizer(torch.nn.Module):
-    def __init__(self, threshold=0.5, activation=None, value=1):
-        super(Binarizer, self).__init__()
+class ToClassIndex(torch.nn.Module):
+    def __init__(self, mode: str ="binary", threshold:float = 0.5, activation=None):
+
+        if mode not in ["binary", "multiclass", "multilabel"]:
+            raise ValueError("mode should be either 'binary', 'multiclass' or 'multilabel' ")
+
+        if threshold and mode == "multiclass":
+            raise ValueError(f"threshold and mode={mode} cannot be used together")
+
+        if self.activation is None:
+            self.activation = torch.nn.Softmax2d() if self.mode == "multiclass" else torch.nn.Sigmoid()
+
+        super(ToClassIndex, self).__init__()
+        self.mode = mode
         self.activation = activation
         self.threshold = threshold
-        self.value = value
 
-    def forward(self, output: torch.FloatTensor):
-        if self.activation is not None:
-            output = self.activation(output)
+    def forward(self, output: torch.FloatTensor) -> torch.Tensor:
 
-        output[output >= self.threshold] = self.value
-        output[output < self.threshold] = 0
+        assert output.ndim == 4  # B,C,H,W
 
-        return output.to(torch.uint8)
-
-
-class Accuracy(torch.nn.Module):
-    def __init__(self, is_multiclass=False, threshold=0.5):
-        super(Accuracy, self).__init__()
-
-        if is_multiclass:
-            self.activation = torch.nn.Softmax2d()
+        if self.mode in ["binary", "multilabel"]:
+            probability = self.activation(output).squeeze(dim=1)
+            class_indices = torch.zeros_like(probability)
+            class_indices[probability >= self.threshold] = 1
         else:
-            self.activation = Binarizer(threshold, torch.nn.Sigmoid())
+            # Multiclass
+            probability = self.activation(output)
+            class_indices = torch.argmax(probability, dim=1)
 
-    def forward(self, output, target):
-
-        output = self.activation(output)
-
-        output = output.to(torch.float)
-        target = target.to(torch.float)
-
-        return (output == target).float().mean()
+        return class_indices
 
 
 class SegmentationMetric(torch.nn.Module, ABC):
@@ -50,7 +47,6 @@ class SegmentationMetric(torch.nn.Module, ABC):
         self,
         mode: str = "binary",
         reduction=None,
-        from_logits=True,
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -75,11 +71,7 @@ class SegmentationMetric(torch.nn.Module, ABC):
         if self.ignore_index is not None and self.mode == "binary":
             raise ValueError("ignore_index is not supported for binary")
 
-        if from_logits and self.activation is not None:
-            raise ValueError("from_logits and activation cannot be used together")
-
-        if from_logits and self.activation is None:
-            self.activation = torch.nn.Softmax2d() if self.mode == "multiclass" else torch.nn.Sigmoid()
+        self.to_class_index = ToClassIndex(self.mode, self.threshold, self.activation)
 
     @abstractmethod
     def forward(
@@ -92,8 +84,7 @@ class SegmentationMetric(torch.nn.Module, ABC):
     def _get_stats(self, output: Union[torch.LongTensor, torch.FloatTensor],
                         target: torch.LongTensor) -> tuple:
 
-        if self.activation is not None:
-            output = self.activation(output)
+        output = self.to_class_index(output)
 
         if self.mode == "multiclass" and self.ignore_index == 0:
             # to handle class 0 (background) in multiclass segmentation for ignore index
@@ -123,7 +114,6 @@ class Precision(SegmentationMetric):
       Args:
          mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'Binary'.
          reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'. Default is None.
-         from_logits (bool, optional): If True, the input is expected to be the raw output of a model. Default is True.
          activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
          ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
          threshold (float, optional): Threshold value for binarizing the output. Default is None.
@@ -135,7 +125,6 @@ class Precision(SegmentationMetric):
         self,
         mode: str = "binary",
         reduction=None,
-        from_logits=True,
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -146,7 +135,6 @@ class Precision(SegmentationMetric):
         super(Precision, self).__init__(
             mode=mode,
             reduction=reduction,
-            from_logits=from_logits,
             activation=activation,
             ignore_index=ignore_index,
             threshold=threshold,
@@ -182,7 +170,6 @@ class Recall(SegmentationMetric):
     Args:
        mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'Binary'.
        reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'. Default is None.
-       from_logits (bool, optional): If True, the input is expected to be the raw output of a model. Default is True.
        activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
        ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
        threshold (float, optional): Threshold value for binarizing the output. Default is None.
@@ -194,7 +181,6 @@ class Recall(SegmentationMetric):
         self,
         mode: str = "binary",
         reduction=None,
-        from_logits=True,
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -205,7 +191,6 @@ class Recall(SegmentationMetric):
         super(Recall, self).__init__(
             mode=mode,
             reduction=reduction,
-            from_logits=from_logits,
             activation=activation,
             ignore_index=ignore_index,
             threshold=threshold,
@@ -240,7 +225,6 @@ class F1Score(SegmentationMetric):
     Args:
        mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'Binary'.
        reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'. Default is None.
-       from_logits (bool, optional): If True, the input is expected to be the raw output of a model. Default is True.
        activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
        ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
        threshold (float, optional): Threshold value for binarizing the output. Default is None.
@@ -252,7 +236,6 @@ class F1Score(SegmentationMetric):
         self,
         mode: str = "binary",
         reduction=None,
-        from_logits=True,
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -263,7 +246,6 @@ class F1Score(SegmentationMetric):
         super(F1Score, self).__init__(
             mode=mode,
             reduction=reduction,
-            from_logits=from_logits,
             activation=activation,
             ignore_index=ignore_index,
             threshold=threshold,
