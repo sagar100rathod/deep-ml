@@ -25,6 +25,10 @@ class MLExperimentLogger(ABC):
     def log_artifact(self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None):
         pass
 
+    @abstractmethod
+    def log_model(self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None):
+        pass
+
 
 class TensorboardLogger(MLExperimentLogger):
 
@@ -67,6 +71,10 @@ class TensorboardLogger(MLExperimentLogger):
                 except Exception as e:
                     print("Warning: Failed to write graph to tensorboard.", e)
 
+    def log_model(self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None):
+        self.log_artifact(tag, value, step, artifact_path)
+
+
 
 class MLFlowLogger(MLExperimentLogger):
 
@@ -93,6 +101,9 @@ class MLFlowLogger(MLExperimentLogger):
         if isinstance(value, dict):
             self.mlflow.pytorch.log_model(value, tag)
 
+    def log_model(self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None):
+        self.log_artifact(tag, value, step, artifact_path)
+
 
 class WandbLogger(MLExperimentLogger):
 
@@ -101,8 +112,13 @@ class WandbLogger(MLExperimentLogger):
     except ImportError as e:
         pass
 
-    def __init__(self, **kwargs: dict):
+    def __init__(self, delete_intermediate_artifacts_versions: bool = True, **kwargs: dict):
+        """
+        :param delete_intermediate_artifacts_versions: Whether to delete intermediate versions of artifacts during logging, avoids memory overflow.
+        :param kwargs: kwarg parameters for wandb.init
+        """
         super().__init__()
+        self.delete_intermediate_artifacts_versions = delete_intermediate_artifacts_versions
         if kwargs:
             self.wandb.init(*kwargs)
 
@@ -113,13 +129,22 @@ class WandbLogger(MLExperimentLogger):
         self.wandb.log({tag: value})
 
     def log_artifact(self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None):
-        if artifact_path and os.path.exists(artifact_path):
-            artifact = self.wandb.Artifact(name=tag, type='model_weights')
-            artifact.add_file(local_path=artifact_path, name=tag)
-            self.wandb.log_artifact(artifact)
-
         if isinstance(value, torch.Tensor) and value.ndim == 4:
             # TODO: log image
             pass
 
+    def log_model(self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None):
+        if artifact_path and os.path.exists(artifact_path):
+            artifact = self.wandb.Artifact(name=tag, type='model')
+            artifact.add_file(local_path=artifact_path, name=tag)
+            self.wandb.log_artifact(artifact)
 
+            if self.delete_intermediate_artifacts_versions:
+
+                # wait for properties to get populated for this artifact
+                artifact.wait()
+                latest_artifact_version = artifact.version
+
+                for artifact in list(artifact.collection.artifacts()):
+                    if artifact.version != latest_artifact_version:
+                        artifact.delete()
