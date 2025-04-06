@@ -32,7 +32,7 @@ class ToClassIndex(torch.nn.Module):
         assert output.ndim == 4  # B,C,H,W
 
         if self.mode in ["binary", "multilabel"]:
-            probability = self.activation(output).squeeze(dim=1)
+            probability = self.activation(output)
             class_indices = torch.zeros_like(probability)
             class_indices[probability >= self.threshold] = 1
         else:

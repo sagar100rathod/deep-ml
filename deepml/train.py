@@ -158,7 +158,7 @@ class Learner:
         filepath = f"{os.path.join(self.__model_dir, tag)}.pt"
         torch.save(save_dict, filepath)
 
-        self.logger.log_artifact(tag, self.__model, epoch, artifact_path=filepath)
+        self.logger.log_model(tag, self.__model, epoch, artifact_path=filepath)
         self.__model.to(self.__device)
         return filepath
 
@@ -246,7 +246,8 @@ class Learner:
             metrics: Dict[str, torch.nn.Module] = None,
             image_inverse_transform: Callable = None,
             logger_img_size=Union[int, Tuple[int, int]],
-            non_blocking=False):
+            non_blocking=True,
+            accumulation_steps: int = 1):
 
         """
         Trains the model on specified train loader for specified number of epochs.
@@ -278,12 +279,16 @@ class Learner:
 
         :param logger_img_size:  image size to use for writing images to tensorboard
 
-        :param non_blocking:  weather to enable asynchronous cuda tensor transfer
+        :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
+
+        :param accumulation_steps : Number of steps to accumulate gradients before updating the model parameters.
+                                    It is a way to simulate a larger batch size without increasing the memory footprint.
         """
         if steps_per_epoch is None:
             steps_per_epoch = len(train_loader)
 
         assert steps_per_epoch <= len(train_loader), "Steps per epoch should not be greater than len(train_loader)"
+        assert accumulation_steps > 0, "Accumulation steps should be greater than 0"
 
         self.__model.to(self.__device)
         self.__criterion = self.__criterion.to(self.__device)
@@ -303,8 +308,13 @@ class Learner:
 
         train_loss = 0
         epochs = self.epochs_completed + epochs
+
+        # zero the parameter gradients
+        self.__optimizer.zero_grad()
+
         for epoch in range(self.epochs_completed, epochs):
             print('Epoch {}/{}:'.format(epoch + 1, epochs))
+
             # Training mode
             self.__model.train()
 
@@ -319,10 +329,8 @@ class Learner:
             self.__write_lr(epoch + 1)
 
             bar = tqdm(total=steps_per_epoch, desc="{:12s}".format('Training'))
-            for batch_index, (x, y) in enumerate(train_loader):
 
-                # zero the parameter gradients
-                self.__optimizer.zero_grad()
+            for batch_index, (x, y) in enumerate(train_loader):
 
                 if isinstance(y, torch.Tensor):
                     y = y.to(self.__device)
@@ -333,20 +341,25 @@ class Learner:
                     y = y.view_as(outputs)
 
                 loss = self.__criterion(outputs, y)
+                loss = loss / accumulation_steps  # Normalize loss by accumulation steps
                 loss.backward()
 
-                self.__optimizer.step()
+                if (batch_index + 1) % accumulation_steps == 0 or (batch_index + 1) == len(train_loader):
+                    self.__optimizer.step()
 
-                if self.__lr_scheduler and self.__lr_scheduler_step_policy == "batch":
-                    self.__lr_scheduler.step()
+                    if self.__lr_scheduler and self.__lr_scheduler_step_policy == "batch":
+                        self.__lr_scheduler.step()
 
-                step = step + 1
-                self.__metrics_dict['loss'] = self.__metrics_dict['loss'] + ((loss.item() - self.__metrics_dict['loss'])
-                                                                             / step)
-                # Update metrics
-                self.__update_metrics(outputs, y, metrics, step)
-                bar.update(1)
-                bar.set_postfix({name: f'{round(value, 4)}' for name, value in self.__metrics_dict.items()})
+                    # zero the parameter gradients
+                    self.__optimizer.zero_grad()
+
+                    step = step + 1
+                    self.__metrics_dict['loss'] = self.__metrics_dict['loss'] + ((loss.item() - self.__metrics_dict['loss'])
+                                                                                 / step)
+                    # Update metrics
+                    self.__update_metrics(outputs, y, metrics, step)
+                    bar.update(1)
+                    bar.set_postfix({name: f'{round(value, 4)}' for name, value in self.__metrics_dict.items()})
 
                 if (batch_index + 1) % steps_per_epoch == 0:
                     break

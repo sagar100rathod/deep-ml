@@ -44,6 +44,8 @@ class Task(ABC):
                           torch.load(weights_file_path, map_location=torch.device('cpu')))
             self._model.load_state_dict(state_dict['model'])
             print("Model Weights Successfully Loaded!")
+        else:
+            print("Failed to load model weights..!")
 
     @property
     def model(self):
