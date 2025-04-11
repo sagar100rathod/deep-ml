@@ -53,8 +53,8 @@ class SegmentationMetric(torch.nn.Module, ABC):
         threshold=None,
         num_classes=None,
         class_weights=None,
+        target_class_index=None,
         zero_division=1.0,
-
     ):
         super(SegmentationMetric, self).__init__()
         self.mode = mode
@@ -65,12 +65,22 @@ class SegmentationMetric(torch.nn.Module, ABC):
         self.class_weights = class_weights
         self.zero_division = zero_division
         self.activation = activation
+        self.target_class_index = target_class_index
 
         if self.mode not in ["binary", "multiclass", "multilabel"]:
             raise ValueError("mode should be either 'binary', 'multiclass' or 'multilabel'")
 
         if self.ignore_index is not None and self.mode == "binary":
             raise ValueError("ignore_index is not supported for binary")
+
+        if self.target_class_index is not None and self.mode == "binary":
+            raise ValueError("target_class_index is not supported for binary")
+
+        if self.num_classes is None and self.mode == "multiclass":
+            raise ValueError("num_classes is required for multiclass mode")
+
+        if self.target_class_index is not None and self.num_classes is not None and self.target_class_index >= self.num_classes:
+            raise ValueError("target_class_index should be less than num_classes")
 
         self.to_class_index = ToClassIndex(self.mode, self.threshold, self.activation)
 
@@ -121,6 +131,7 @@ class Precision(SegmentationMetric):
          num_classes (int, optional): Number of classes for the metric calculation. Default is None.
          class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
          zero_division (float): Value to return when there is a zero division. Default is 1.0.
+         target_class_index (int, optional): The class index for which to compute the precision. Default is None.
     """
     def __init__(
         self,
@@ -131,6 +142,7 @@ class Precision(SegmentationMetric):
         threshold=None,
         num_classes=None,
         class_weights=None,
+        target_class_index=None,
         zero_division=1.0,
     ):
         super(Precision, self).__init__(
@@ -141,6 +153,7 @@ class Precision(SegmentationMetric):
             threshold=threshold,
             num_classes=num_classes,
             class_weights=class_weights,
+            target_class_index=target_class_index,
             zero_division=zero_division,
         )
 
@@ -153,6 +166,13 @@ class Precision(SegmentationMetric):
             output,
             target
         )
+
+        if self.target_class_index is not None:
+            tp = tp[0][self.target_class_index]
+            fp = fp[0][self.target_class_index]
+            fn = fn[0][self.target_class_index]
+            tn = tn[0][self.target_class_index]
+
         return precision(
             tp=tp,
             fp=fp,
@@ -176,7 +196,9 @@ class Recall(SegmentationMetric):
        threshold (float, optional): Threshold value for binarizing the output. Default is None.
        num_classes (int, optional): Number of classes for the metric calculation. Default is None.
        class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
+       target_class_index (int, optional): The class index for which to compute the recall. Default is None.
        zero_division (float): Value to return when there is a zero division. Default is 1.0.
+
     """
     def __init__(
         self,
@@ -187,6 +209,7 @@ class Recall(SegmentationMetric):
         threshold=None,
         num_classes=None,
         class_weights=None,
+        target_class_index=None,
         zero_division=1.0,
     ):
         super(Recall, self).__init__(
@@ -197,6 +220,7 @@ class Recall(SegmentationMetric):
             threshold=threshold,
             num_classes=num_classes,
             class_weights=class_weights,
+            target_class_index=target_class_index,
             zero_division=zero_division,
         )
 
@@ -208,6 +232,13 @@ class Recall(SegmentationMetric):
         tp, fp, fn, tn = self._get_stats(
             output,
             target)
+
+        if self.target_class_index is not None:
+            tp = tp[0][self.target_class_index]
+            fp = fp[0][self.target_class_index]
+            fn = fn[0][self.target_class_index]
+            tn = tn[0][self.target_class_index]
+
         return recall(
             tp=tp,
             fp=fp,
@@ -231,6 +262,7 @@ class F1Score(SegmentationMetric):
        threshold (float, optional): Threshold value for binarizing the output. Default is None.
        num_classes (int, optional): Number of classes for the metric calculation. Default is None.
        class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
+       target_class_index (int, optional): The class index for which to compute the f1 score. Default is None.
        zero_division (float): Value to return when there is a zero division. Default is 1.0.
     """
     def __init__(
@@ -242,6 +274,7 @@ class F1Score(SegmentationMetric):
         threshold=None,
         num_classes=None,
         class_weights=None,
+        target_class_index=None,
         zero_division=1.0,
     ):
         super(F1Score, self).__init__(
@@ -252,6 +285,7 @@ class F1Score(SegmentationMetric):
             threshold=threshold,
             num_classes=num_classes,
             class_weights=class_weights,
+            target_class_index=target_class_index,
             zero_division=zero_division,
         )
 
@@ -263,6 +297,14 @@ class F1Score(SegmentationMetric):
         tp, fp, fn, tn = self._get_stats(
             output,
             target)
+
+        if self.target_class_index is not None:
+            tp = tp[0][self.target_class_index]
+            fp = fp[0][self.target_class_index]
+            fn = fn[0][self.target_class_index]
+            tn = tn[0][self.target_class_index]
+
+
         return f1_score(
             tp=tp,
             fp=fp,

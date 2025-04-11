@@ -25,7 +25,7 @@ class Learner:
         """
         Training class for learning a model weights using particular task.
 
-        :param task: Object of sub class deepml.tasks.Task
+        :param task: Object of subclass deepml.tasks.Task
         :param optimizer: The optimizer from torch.optim
         :param criterion: The loss function
         :param load_state: Weather to resume model training. Default is False.
@@ -309,8 +309,8 @@ class Learner:
         train_loss = 0
         epochs = self.epochs_completed + epochs
 
-        # zero the parameter gradients
-        self.__optimizer.zero_grad()
+        # Nullify the parameter gradients
+        self.__optimizer.zero_grad(set_to_none=True)
 
         for epoch in range(self.epochs_completed, epochs):
             print('Epoch {}/{}:'.format(epoch + 1, epochs))
@@ -350,8 +350,8 @@ class Learner:
                     if self.__lr_scheduler and self.__lr_scheduler_step_policy == "batch":
                         self.__lr_scheduler.step()
 
-                    # zero the parameter gradients
-                    self.__optimizer.zero_grad()
+                    # Nullify the parameter gradients
+                    self.__optimizer.zero_grad(set_to_none=True)
 
                     step = step + 1
                     self.__metrics_dict['loss'] = self.__metrics_dict['loss'] + ((loss.item() - self.__metrics_dict['loss'])
