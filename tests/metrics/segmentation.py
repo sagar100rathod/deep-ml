@@ -1,6 +1,6 @@
 import pytest
 import torch
-from deepml.metrics.segmentation import Precision, Recall
+from deepml.metrics.segmentation import Precision, Recall, IoUScore
 
 
 def test_precision_binary_classification():
@@ -139,3 +139,18 @@ def test_precision_recall_multilabel():
     recall = Recall(mode="multilabel", num_classes=3, threshold=0.6, target_class_index=2)
     assert pytest.approx(precision(pred, gt), 0.001) == 0.20
     assert pytest.approx(recall(pred, gt), 0.001) == 0.25
+
+
+def test_jaccard_index_binary_custom_activation():
+    gt = torch.tensor([[[[0, 1, 1], [0, 0, 1], [1, 1, 1]]]])
+    pred = torch.tensor([[[[1, 1, 1], [1, 0, 0], [1, 1 , 0]]]])
+
+    iou = IoUScore(mode="binary", activation=lambda a: a, threshold=0.5)
+
+    assert pytest.approx(iou(pred, gt), 0.001) == 0.5
+
+
+    gt = torch.tensor([[[[1, 1, 0], [1, 1, 0], [1, 1, 0]]]])
+    pred = torch.tensor([[[[1, 1, 1], [1, 1, 1], [1, 1 , 1]]]])
+
+    assert pytest.approx(iou(pred, gt), 0.001) == 0.667

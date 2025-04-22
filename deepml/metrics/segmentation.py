@@ -6,6 +6,7 @@ from segmentation_models_pytorch.metrics.functional import (
     precision,
     recall,
     f1_score,
+    iou_score
 )
 
 
@@ -306,6 +307,72 @@ class F1Score(SegmentationMetric):
 
 
         return f1_score(
+            tp=tp,
+            fp=fp,
+            fn=fn,
+            tn=tn,
+            reduction=self.reduction,
+            class_weights=self.class_weights,
+            zero_division=self.zero_division,
+        )
+
+
+class IoUScore(SegmentationMetric):
+    """
+      Computes the jaccard index metric for segmentation.
+
+      Args:
+         mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'Binary'.
+         reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'. Default is None.
+         activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
+         ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
+         threshold (float, optional): Threshold value for binarizing the output. Default is None.
+         num_classes (int, optional): Number of classes for the metric calculation. Default is None.
+         class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
+         zero_division (float): Value to return when there is a zero division. Default is 1.0.
+         target_class_index (int, optional): The class index for which to compute the precision. Default is None.
+    """
+    def __init__(
+            self,
+            mode: str = "binary",
+            reduction=None,
+            activation=None,
+            ignore_index=None,
+            threshold=None,
+            num_classes=None,
+            class_weights=None,
+            target_class_index=None,
+            zero_division=1.0,
+    ):
+        super(IoUScore, self).__init__(
+            mode=mode,
+            reduction=reduction,
+            activation=activation,
+            ignore_index=ignore_index,
+            threshold=threshold,
+            num_classes=num_classes,
+            class_weights=class_weights,
+            target_class_index=target_class_index,
+            zero_division=zero_division,
+        )
+
+    def forward(
+            self,
+            output: Union[torch.LongTensor, torch.FloatTensor],
+            target: torch.LongTensor,
+    ):
+        tp, fp, fn, tn = self._get_stats(
+            output,
+            target
+        )
+
+        if self.target_class_index is not None:
+            tp = tp[0][self.target_class_index]
+            fp = fp[0][self.target_class_index]
+            fn = fn[0][self.target_class_index]
+            tn = tn[0][self.target_class_index]
+
+        return iou_score(
             tp=tp,
             fp=fp,
             fn=fn,

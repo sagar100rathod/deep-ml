@@ -11,5 +11,6 @@ torchvision~=0.11.1
 scikit-image ~= 0.16.2
 pytest ~= 3.5.1
 rasterio ~= 1.1.1
-deepml~=2.0.0
 mlflow~=1.2.0
+wandb~=0.13.4
+segmentation-models-pytorch~=0.3.0

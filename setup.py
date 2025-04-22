@@ -30,5 +30,5 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=["tensorboard>=1.14.0", "scikit-learn>=0.22",
-                      "numpy>=1.16", "pandas>=0.25.3", "matplotlib>=2.2.5"]
+                      "numpy>=1.16", "pandas>=0.25.3", "matplotlib>=2.2.5", "segmentation-models-pytorch>=0.1.3"]
     )
