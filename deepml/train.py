@@ -21,6 +21,7 @@ class Learner:
                  lr_scheduler=None,
                  lr_scheduler_step_policy: str = "epoch",
                  load_state: bool = False,
+                 use_amp: bool = False,
                  logger: MLExperimentLogger = None):
         """
         Training class for learning a model weights using particular task.
@@ -36,6 +37,7 @@ class Learner:
                                          Default is "epoch" policy.
                                          Use "batch" policy if you want lr_scheduler.step() to be
                                          called after each gradient step.
+        :param use_amp: Whether to use automatic mixed precision (AMP) for training. Default is False.
         """
         assert isinstance(task, Task)
 
@@ -47,6 +49,7 @@ class Learner:
         self.__criterion = None
         self.__lr_scheduler = None
         self.__lr_scheduler_step_policy = None
+        self.__use_amp = use_amp
 
         self.set_optimizer(optimizer)
         self.set_criterion(criterion)
@@ -63,11 +66,15 @@ class Learner:
 
         self.__metrics_dict = OrderedDict({'loss': 0})
 
-        if load_state:
-            self.__load_state()
-
         self.__device = self.__predictor.device
         self.set_device(self.__device)
+
+        # gradient scaler for mixed precision training
+        # The same GradScaler instance should be used for the entire convergence run, if multiple calls to fit are used.
+        self.__scaler = torch.amp.GradScaler(self.__device, enabled=self.__use_amp)
+
+        if load_state:
+            self.__load_state()
 
     def set_optimizer(self, optimizer: torch.optim.Optimizer):
         assert isinstance(optimizer, torch.optim.Optimizer)
@@ -111,6 +118,9 @@ class Learner:
         if self.__lr_scheduler:
             self.__load_lr_schedular_state(state_dict)
 
+        if self.__use_amp and 'scaler' in state_dict:
+            self.__scaler.load_state_dict(state_dict['scaler'])
+
         if 'epoch' in state_dict:
             self.epochs_completed = state_dict['epoch']
 
@@ -146,6 +156,9 @@ class Learner:
         if self.__lr_scheduler:
             save_dict['lr_scheduler'] = self.__lr_scheduler.__class__.__name__
             save_dict['lr_scheduler_state'] = self.__lr_scheduler.state_dict()
+
+        if self.__use_amp:
+            save_dict['scaler'] = self.__scaler.state_dict()
 
         if type(epoch) == int:
             save_dict['epoch'] = epoch
@@ -245,9 +258,11 @@ class Learner:
             save_model_after_every_epoch: int = 5,
             metrics: Dict[str, torch.nn.Module] = None,
             image_inverse_transform: Callable = None,
-            logger_img_size=Union[int, Tuple[int, int]],
-            non_blocking=True,
-            accumulation_steps: int = 1):
+            logger_img_size: Union[int, Tuple[int, int]] = None,
+            non_blocking: bool = True,
+            gradient_accumulation_steps: int = 1,
+            gradient_clip_value: float = 0,
+            gradient_clip_algorithm: str = "norm"):
 
         """
         Trains the model on specified train loader for specified number of epochs.
@@ -281,14 +296,23 @@ class Learner:
 
         :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
 
-        :param accumulation_steps : Number of steps to accumulate gradients before updating the model parameters.
+        :param gradient_accumulation_steps : Number of steps to accumulate gradients before updating the model parameters.
                                     It is a way to simulate a larger batch size without increasing the memory footprint.
+
+        :param gradient_clip_value: The maximum value for gradient clipping. Default is 0, which means no clipping.
+                                    The gradients will be clipped to the range [-gradient_clip_value, gradient_clip_value]
+
+        :param gradient_clip_algorithm: Default is "norm", which means gradient clipping is done using the norm of the gradients.
+                                        "value" means gradient clipping is done using the value of the gradients.
+                                        "agc" means adaptive gradient clipping.
+                                        Should be one of ["norm", "value"].
         """
         if steps_per_epoch is None:
             steps_per_epoch = len(train_loader)
 
         assert steps_per_epoch <= len(train_loader), "Steps per epoch should not be greater than len(train_loader)"
-        assert accumulation_steps > 0, "Accumulation steps should be greater than 0"
+        assert gradient_accumulation_steps > 0, "Accumulation steps should be greater than 0"
+        assert gradient_clip_algorithm in ["norm", "value"]
 
         self.__model.to(self.__device)
         self.__criterion = self.__criterion.to(self.__device)
@@ -335,17 +359,33 @@ class Learner:
                 if isinstance(y, torch.Tensor):
                     y = y.to(self.__device)
 
-                outputs, x, y = self.__predictor.train_step(x, y, non_blocking)
+                with torch.autocast(dtype=torch.float16, device_type=self.__device, enabled=self.__use_amp):
+                    outputs, x, y = self.__predictor.train_step(x, y, non_blocking)
 
-                if isinstance(outputs, torch.Tensor) and outputs.ndim == 2 and outputs.shape[1] == 1:
-                    y = y.view_as(outputs)
+                    if isinstance(outputs, torch.Tensor) and outputs.ndim == 2 and outputs.shape[1] == 1:
+                        y = y.view_as(outputs)
 
-                loss = self.__criterion(outputs, y)
-                loss = loss / accumulation_steps  # Normalize loss by accumulation steps
-                loss.backward()
+                    loss = self.__criterion(outputs, y)
+                    loss = loss / gradient_accumulation_steps  # Normalize loss by accumulation steps
 
-                if (batch_index + 1) % accumulation_steps == 0 or (batch_index + 1) == len(train_loader):
-                    self.__optimizer.step()
+                # Accumulates scaled gradients
+                self.__scaler.scale(loss).backward()
+
+                if (batch_index + 1) % gradient_accumulation_steps == 0 or (batch_index + 1) == len(train_loader):
+
+                    # Apply Gradient clipping
+                    if gradient_clip_value is not None and gradient_clip_value > 0:
+                        self.__scaler.unscale_(self.__optimizer)
+                        if gradient_clip_algorithm == "norm":
+                            torch.nn.utils.clip_grad_norm_(self.__model.parameters(), gradient_clip_value)
+                        elif gradient_clip_algorithm == "value":
+                            torch.nn.utils.clip_grad_value_(self.__model.parameters(), gradient_clip_value)
+
+                    # Update model parameters
+                    self.__scaler.step(self.__optimizer)
+
+                    # Updates the scale for next iteration.
+                    self.__scaler.update()
 
                     if self.__lr_scheduler and self.__lr_scheduler_step_policy == "batch":
                         self.__lr_scheduler.step()
@@ -367,9 +407,10 @@ class Learner:
             self.epochs_completed = self.epochs_completed + 1
 
             # Write some sample training images to logger
-            self.__predictor.write_prediction_to_logger('train', train_loader,
-                                                        self.logger, image_inverse_transform,
-                                                        self.epochs_completed, img_size=logger_img_size)
+            if logger_img_size is not None:
+                self.__predictor.write_prediction_to_logger('train', train_loader,
+                                                            self.logger, image_inverse_transform,
+                                                            self.epochs_completed, img_size=logger_img_size)
 
             train_loss = self.__metrics_dict['loss']
             self.__write_metrics_to_logger('train', self.epochs_completed)
@@ -382,11 +423,12 @@ class Learner:
                 self.__write_metrics_to_logger('val', self.epochs_completed)
                 self.__write_history('val')
                 message = message + f"Validation Loss: {val_loss:.4f} "
+
                 # write random val images to tensorboard
-                self.__predictor.write_prediction_to_logger('val', val_loader,
-                                                            self.logger, image_inverse_transform,
-                                                            self.epochs_completed,
-                                                            img_size=logger_img_size)
+                if logger_img_size is not None:
+                    self.__predictor.write_prediction_to_logger('val', val_loader,
+                                                                self.logger, image_inverse_transform,
+                                                                self.epochs_completed, img_size=logger_img_size)
                 # Save best validation model
                 if val_loss < self.best_val_loss:
                     message = message + "[Saving best validation model]"
