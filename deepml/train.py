@@ -383,9 +383,7 @@ class Learner:
         if lr_scheduler is not None and load_scheduler_state and 'scheduler_state_dict' in state_dict:
             Learner.__load_lr_schedular_state(lr_scheduler, state_dict)
 
-        model.to(fabric.device)
-        optimizer.to(fabric.device)
-        criterion = self.__criterion.to(fabric.device)
+        criterion = self.__criterion
         epochs_completed = self.epochs_completed
         best_val_loss = self.best_val_loss
         epochs = epochs_completed + epochs
@@ -405,13 +403,13 @@ class Learner:
             train_global_metrics_dict = self.__train(fabric,
                                                      model,
                                                      optimizer,
-                                                    criterion, train_loader,
-                                                    step_lr_scheduler=lr_scheduler if self.__lr_scheduler_step_policy == "step" else None,
-                                                    metrics=metrics,
-                                                    non_blocking=non_blocking,
-                                                    gradient_accumulation_steps=gradient_accumulation_steps,
-                                                    gradient_clip_value=gradient_clip_value,
-                                                    gradient_clip_algorithm=gradient_clip_algorithm)
+                                                     criterion, train_loader,
+                                                     step_lr_scheduler=lr_scheduler if self.__lr_scheduler_step_policy == "step" else None,
+                                                     metrics=metrics,
+                                                     non_blocking=non_blocking,
+                                                     gradient_accumulation_steps=gradient_accumulation_steps,
+                                                     gradient_clip_value=gradient_clip_value,
+                                                     gradient_clip_max_norm=gradient_clip_max_norm)
 
             # evaluation
             if val_loader is not None:
