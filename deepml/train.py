@@ -477,9 +477,6 @@ class Learner:
                 gradient_clip_value: Optional[float] = None,
                 gradient_clip_max_norm: Optional[float] = None) -> OrderedDict[str, float]:
 
-        assert model is not None
-        assert isinstance(train_loader, torch.utils.data.DataLoader) and len(train_loader) > 0
-
         # Training mode
         model.train()
 
