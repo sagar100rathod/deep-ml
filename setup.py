@@ -17,8 +17,6 @@ setuptools.setup(
     package_data={"deepml": ["resources/fonts/*.ttf"]},
     classifiers=[
         "Development Status :: 5 - Production/Stable",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: MIT License",
         "License :: Free For Educational Use",
@@ -28,7 +26,8 @@ setuptools.setup(
         "Topic :: Software Development :: Libraries",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.8',
     install_requires=["tensorboard>=1.14.0", "scikit-learn>=0.22",
-                      "numpy>=1.16", "pandas>=0.25.3", "matplotlib>=2.2.5", "segmentation-models-pytorch>=0.1.3"]
+                      "numpy>=1.16", "pandas>=0.25.3", "matplotlib>=2.2.5", "segmentation-models-pytorch>=0.1.3",
+                      "lightning-fabric>=2.5.0"]
     )

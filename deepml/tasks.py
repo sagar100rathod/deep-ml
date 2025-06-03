@@ -18,19 +18,28 @@ from deepml.visualize import plot_images_with_title, plot_images
 class Task(ABC):
 
     def __init__(self, model: torch.nn.Module, model_dir: str, load_saved_model: bool = False,
-                 model_file_name: str = 'latest_model.pt', use_gpu: bool = True):
+                 model_file_name: str = 'latest_model.pt', device: str = "auto"):
 
         super(Task, self).__init__()
 
-        assert isinstance(model, torch.nn.Module)
-        assert model_dir is not None
-        assert isinstance(model_file_name, str)
+        assert isinstance(model, torch.nn.Module), "model should be an instance of torch.nn.Module"
+        assert model_dir is not None, "model_dir should not be None"
+        assert isinstance(model_file_name, str), "model_file_name should be a string"
+        assert device in ["auto", "cpu", "cuda", "mps"], "device should be one of 'auto', 'cpu', 'cuda', 'mps'"
 
         self._model = model
-        self._device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
-
         self._model_dir = model_dir
         self._model_file_name = model_file_name
+
+        if device == "auto":
+            if torch.cuda.is_available():
+                self._device = torch.device('cuda')
+            elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                self._device = torch.device('mps')
+            else:
+                self._device = torch.device('cpu')
+        else:
+            self._device = torch.device(device)
 
         os.makedirs(self.model_dir, exist_ok=True)
         weights_file_path = os.path.join(self._model_dir, self._model_file_name)
@@ -52,26 +61,31 @@ class Task(ABC):
         return self._model
 
     @property
-    def device(self):
-        return self._device
-
-    @property
     def model_dir(self):
         return self._model_dir
+
+    @property
+    def device(self):
+        return self._device
 
     @property
     def model_file_name(self):
         return self._model_file_name
 
-    def move_input_to_device(self, x: Union[torch.Tensor, list, tuple], non_blocking=False):
+    def move_input_to_device(self, x: Union[torch.Tensor, list, tuple], device: Union[torch.device, str, None] = None,
+                             non_blocking: bool = False, **kwargs: dict) -> Union[torch.Tensor, list, tuple, dict]:
+
+        if device is None:
+            device = self._device
+
         if isinstance(x, torch.Tensor):
-            x = x.to(self._device, non_blocking=non_blocking)
+            x = x.to(device, non_blocking=non_blocking)
         elif isinstance(x, list):  # list of torch tensors
-            x = [i.to(self._device, non_blocking=non_blocking) for i in x]
+            x = [i.to(device, non_blocking=non_blocking) for i in x]
         elif isinstance(x, tuple):  # tuple of torch tensors
-            x = tuple([i.to(self._device, non_blocking=non_blocking) for i in x])
+            x = tuple([i.to(device, non_blocking=non_blocking) for i in x])
         elif isinstance(x, dict):  # dict values as torch tensors
-            x = {key: value.to(self._device, non_blocking=non_blocking) for key, value in x.items()}
+            x = {key: value.to(device, non_blocking=non_blocking) for key, value in x.items()}
 
         return x
 
@@ -131,6 +145,7 @@ class Task(ABC):
         pass
 
 
+
 class NeuralNetTask(Task):
     """
         Use this simple predictor class for any deep learning task.
@@ -139,13 +154,17 @@ class NeuralNetTask(Task):
     """
 
     def __init__(self, model: torch.nn.Module, model_dir: str, load_saved_model: bool = False,
-                 model_file_name: str = 'latest_model.pt', use_gpu: bool = True):
+                 model_file_name: str = 'latest_model.pt', device: str = "auto"):
         super(NeuralNetTask, self).__init__(model, model_dir, load_saved_model,
-                                            model_file_name, use_gpu)
+                                            model_file_name, device)
 
     def predict_batch(self, x: torch.Tensor, *args, **kwargs):
         x = self.move_input_to_device(x, **kwargs)
-        return self._model(x)
+
+        if 'model' in kwargs:
+            return kwargs['model'](x)
+        else:
+            return self._model(x)
 
     def train_step(self, x, y, *args, **kwargs):
         return self.predict_batch(x, *args, **kwargs), x, y
@@ -230,7 +249,7 @@ class Segmentation(NeuralNetTask):
     """
 
     def __init__(self, model: torch.nn.Module, model_dir: str, load_saved_model: bool = False,
-                 model_file_name: str = 'latest_model.pt', use_gpu: bool = True, num_classes: int = 1,
+                 model_file_name: str = 'latest_model.pt', device: str = "auto", num_classes: int = 1,
                  threshold: float = 0.5, color_map: dict = None):
         """
 
@@ -238,7 +257,7 @@ class Segmentation(NeuralNetTask):
         :param model_dir:
         :param load_saved_model:
         :param model_file_name:
-        :param use_gpu:
+        :param device: The device to use for model inference. Default is "auto" which uses cuda if available,
         :param num_classes:   The number of classes. Default is 1 for binary segmentation.
                           The class index 0 being background class and 1 being object of interest.
         :param threshold: The threshold for binary segmentation.
@@ -252,7 +271,7 @@ class Segmentation(NeuralNetTask):
         """
 
         super(Segmentation, self).__init__(model, model_dir, load_saved_model,
-                                           model_file_name, use_gpu)
+                                           model_file_name, device)
         assert isinstance(num_classes, int), "should be the number of classes"
         assert num_classes >= 1, "for segmentation task, it should be greater than 1 class"
 
@@ -282,11 +301,13 @@ class Segmentation(NeuralNetTask):
 
         self.palette = self.palette + list(np.zeros(768 - (len(self.palette)), dtype=np.uint8).tolist())
 
-    def predict_batch(self, x: Union[torch.Tensor, np.ndarray], *args, **kwargs) -> torch.Tensor:
-        x = (self.move_input_to_device(x) if "non_blocking" not in kwargs
-             else self.move_input_to_device(x, kwargs["non_blocking"]))
+    def predict_batch(self, x: Union[torch.Tensor, np.ndarray], *args, **kwargs: Dict[str, Any]) -> torch.Tensor:
+        x = self.move_input_to_device(x, **kwargs) # Move input to device
 
-        pred = self._model(x)
+        if 'model' in kwargs:
+            pred = kwargs['model'](x)
+        else:
+            pred = self._model(x)
 
         if isinstance(pred, dict) and 'out' in pred:
             return pred['out']  # torchvision model's returns prediction in OrderedDict
@@ -447,9 +468,9 @@ class ImageRegression(NeuralNetTask):
     """
 
     def __init__(self, model: torch.nn.Module, model_dir: str, load_saved_model: bool = False,
-                 model_file_name: str = 'latest_model.pt', use_gpu: bool = True):
+                 model_file_name: str = 'latest_model.pt', device: str = "auto"):
         super(ImageRegression, self).__init__(model, model_dir, load_saved_model,
-                                              model_file_name, use_gpu)
+                                              model_file_name, device)
 
     def show_predictions(self, loader: torch.utils.data.DataLoader,
                          image_inverse_transform: Callable = None,
@@ -571,9 +592,9 @@ class ImageClassification(NeuralNetTask):
     """
 
     def __init__(self, model: torch.nn.Module, model_dir: str, load_saved_model: bool = False,
-                 model_file_name: str = 'latest_model.pt', use_gpu: bool = True, classes: Sequence = None):
+                 model_file_name: str = 'latest_model.pt', device: str = "auto", classes: Sequence = None):
         super(ImageClassification, self).__init__(model, model_dir, load_saved_model,
-                                                  model_file_name, use_gpu)
+                                                  model_file_name, device)
         self._classes = classes
 
     def predict_class(self, loader: torch.utils.data.DataLoader):
@@ -715,10 +736,10 @@ class MultiLabelImageClassification(ImageClassification):
     The class useful for multi label image classification task.
     """
 
-    def __init__(self, model: torch.nn.Module, model_dir, load_saved_model=False,
-                 model_file_name='latest_model.pt', use_gpu=True, classes=None):
+    def __init__(self, model: torch.nn.Module, model_dir, load_saved_model: bool = False,
+                 model_file_name: str = 'latest_model.pt', device: str= "auto", classes=None):
         super(MultiLabelImageClassification, self).__init__(model, model_dir, load_saved_model,
-                                                            model_file_name, use_gpu)
+                                                            model_file_name, device)
         self._classes = classes
 
     def predict_class(self, loader):

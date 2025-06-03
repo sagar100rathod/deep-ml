@@ -1,5 +1,5 @@
 import os
-from typing import Callable
+from typing import List, Tuple, Callable
 
 from PIL import Image
 import numpy as np
@@ -10,7 +10,8 @@ from deepml.utils import get_random_samples_batch_from_loader, transform_input, 
     get_random_samples_batch_from_dataset
 
 
-def plot_images(images, labels=None, cols=4, figsize=(10, 10), fontsize=14):
+def plot_images(images: List[np.ndarray|Image.Image], labels: List[str]=None, cols:int =4,
+                figsize:Tuple[int, int] = (10, 10), fontsize: int = 14):
     """
     Plot images with provided labels.
     :param images: The list of images of type np.array.
