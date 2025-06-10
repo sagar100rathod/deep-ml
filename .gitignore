@@ -145,3 +145,4 @@ cython_debug/
 deepml/data/
 notebooks/data/
 tests/data/
+scripts/data
