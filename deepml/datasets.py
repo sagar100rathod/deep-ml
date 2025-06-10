@@ -1,21 +1,26 @@
-from typing import Union, Tuple, List, Callable, Any
 import os
+from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from PIL import Image
 import torch
 import torchvision
+from PIL import Image
 
 
 class ImageRowDataFrameDataset(torch.utils.data.Dataset):
-    """ Class useful for reading images from a dataframe.
-        Each row is assume to be the flattened array of an image.
-        Each row is then reshaped to the provided image_size.
+    """Class useful for reading images from a dataframe.
+    Each row is assume to be the flattened array of an image.
+    Each row is then reshaped to the provided image_size.
     """
 
-    def __init__(self, dataframe: pd.DataFrame, target_column: str = None, image_size: Tuple[int, int] = (28, 28),
-                 transform: Callable = None):
+    def __init__(
+        self,
+        dataframe: pd.DataFrame,
+        target_column: str = None,
+        image_size: Tuple[int, int] = (28, 28),
+        transform: Callable = None,
+    ):
         self.dataframe = dataframe.reset_index(drop=True, inplace=False)
         self.target_column = None
 
@@ -46,12 +51,18 @@ class ImageRowDataFrameDataset(torch.utils.data.Dataset):
 
 
 class ImageDataFrameDataset(torch.utils.data.Dataset):
-    """ This class is useful for reading dataset of images for image classification/regression problem.
-    """
+    """This class is useful for reading dataset of images for image classification/regression problem."""
 
-    def __init__(self, dataframe: pd.DataFrame, image_file_name_column: str = 'image', target_columns: Union[int, List[
-        str]] = None, image_dir: str = None, transforms: Callable = None,
-                 target_transform: Callable = None, open_file_func: Callable = None):
+    def __init__(
+        self,
+        dataframe: pd.DataFrame,
+        image_file_name_column: str = "image",
+        target_columns: Union[int, List[str]] = None,
+        image_dir: str = None,
+        transforms: Callable = None,
+        target_transform: Callable = None,
+        open_file_func: Callable = None,
+    ):
 
         self.dataframe = dataframe.reset_index(drop=True, inplace=False)
         self.image_file_name_column = image_file_name_column
@@ -91,7 +102,12 @@ class ImageDataFrameDataset(torch.utils.data.Dataset):
 
 class ImageListDataset(torch.utils.data.Dataset):
 
-    def __init__(self, image_dir: str, transforms: Callable = None, open_file_func: Callable = None):
+    def __init__(
+        self,
+        image_dir: str,
+        transforms: Callable = None,
+        open_file_func: Callable = None,
+    ):
 
         self.image_dir = image_dir
         self.images = os.listdir(image_dir)
@@ -117,20 +133,29 @@ class ImageListDataset(torch.utils.data.Dataset):
 
 class SegmentationDataFrameDataset(torch.utils.data.Dataset):
     """
-        This class is useful for reading images and mask labels required for
-        semantic segmentation problems.
+    This class is useful for reading images and mask labels required for
+    semantic segmentation problems.
 
-        The image file and corresponding mask label file should have the same name,
-        and should be stored in a provided mask directory.
+    The image file and corresponding mask label file should have the same name,
+    and should be stored in a provided mask directory.
 
-        You can provide custom open_file_func for reading image, by default it uses PIL Image.open()
-        open_file_func should accept 2 parameters: image_file_path, mask_file path
-        and return image, mask
+    You can provide custom open_file_func for reading image, by default it uses PIL Image.open()
+    open_file_func should accept 2 parameters: image_file_path, mask_file path
+    and return image, mask
     """
 
-    def __init__(self, dataframe: pd.DataFrame, image_dir: str, mask_dir: str = None, image_col: str = 'image',
-                 mask_col: str = None, albu_torch_transforms: Callable = None,
-                 target_transform: Callable = None, train: bool = True, open_file_func: Callable = None):
+    def __init__(
+        self,
+        dataframe: pd.DataFrame,
+        image_dir: str,
+        mask_dir: str = None,
+        image_col: str = "image",
+        mask_col: str = None,
+        albu_torch_transforms: Callable = None,
+        target_transform: Callable = None,
+        train: bool = True,
+        open_file_func: Callable = None,
+    ):
         """
 
         :param dataframe: the pandas dataframe
@@ -165,8 +190,14 @@ class SegmentationDataFrameDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index: int):
 
-        image_file = os.path.join(self.image_dir, self.dataframe.loc[index, self.image_col])
-        mask_file = os.path.join(self.mask_dir, self.dataframe.loc[index, self.mask_col]) if self.train else None
+        image_file = os.path.join(
+            self.image_dir, self.dataframe.loc[index, self.image_col]
+        )
+        mask_file = (
+            os.path.join(self.mask_dir, self.dataframe.loc[index, self.mask_col])
+            if self.train
+            else None
+        )
 
         if self.open_file_func is None:
             image = np.array(Image.open(image_file))
@@ -181,9 +212,9 @@ class SegmentationDataFrameDataset(torch.utils.data.Dataset):
             transformed = self.albu_torch_transforms(image=image)
 
         if self.train and self.target_transform:
-            transformed['mask'] = self.target_transform(transformed['mask'])
+            transformed["mask"] = self.target_transform(transformed["mask"])
 
         if self.train:
-            return transformed['image'], transformed['mask']
+            return transformed["image"], transformed["mask"]
         else:
-            return transformed['image'], self.dataframe.loc[index, self.image_col]
+            return transformed["image"], self.dataframe.loc[index, self.image_col]

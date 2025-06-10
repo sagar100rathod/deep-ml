@@ -1,21 +1,22 @@
 import unittest
-from deepml.train import Learner
-from deepml.losses import RMSELoss
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset
 import torchvision
+from torch.utils.data import Dataset
+
+from deepml.fabric_trainer import FabricTrainer
+from deepml.losses import RMSELoss
 
 
 class TestDataSet(torch.utils.data.Dataset):
-    """ Class useful for reading images from a dataframe.
-        Each row is assume to be the flattened array of an image.
-        Each row is then reshaped to the provided image_size.
+    """Class useful for reading images from a dataframe.
+    Each row is assume to be the flattened array of an image.
+    Each row is then reshaped to the provided image_size.
     """
 
-    def __init__(self, samples=1000, img_size=(32, 32), channels=3,
-                 num_classes=0):
+    def __init__(self, samples=1000, img_size=(32, 32), channels=3, num_classes=0):
 
         self.samples = samples
         self.img_size = img_size
@@ -63,49 +64,69 @@ class TestLearner(unittest.TestCase):
         with self.assertRaises(ValueError):
             model = None
             optimizer = None
-            model_save_path = 'test'
-            learner = Learner(model, optimizer, model_save_path)
+            model_save_path = "test"
+            learner = FabricTrainer(model, optimizer, model_save_path)
 
     @unittest.skip
     def test_image_regression(self):
         train_dataset = TestDataSet(samples=100)
         val_dataset = TestDataSet(samples=50)
 
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8,
-                                                   shuffle=True)
-        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=8,
-                                                 shuffle=False)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=8, shuffle=True
+        )
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=8, shuffle=False
+        )
 
         model = TestNetwork(head_nodes=1)
         criterion = RMSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
-        learner = Learner(model, optimizer, 'test_img_reg', use_gpu=False)
+        learner = FabricTrainer(model, optimizer, "test_img_reg", use_gpu=False)
 
         learner.fit(criterion, train_loader, val_loader, epochs=2)
 
     @unittest.skip
     def test_image_classification(self):
-        train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                                     download=True,
-                                                     transform=torchvision.transforms.ToTensor())
+        train_dataset = torchvision.datasets.CIFAR10(
+            root="./data",
+            train=True,
+            download=True,
+            transform=torchvision.transforms.ToTensor(),
+        )
 
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64,
-                                                   shuffle=True, num_workers=2)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=64, shuffle=True, num_workers=2
+        )
 
-        val_dataset = torchvision.datasets.CIFAR10(root='./data', download=True,
-                                                   transform=torchvision.transforms.ToTensor())
+        val_dataset = torchvision.datasets.CIFAR10(
+            root="./data", download=True, transform=torchvision.transforms.ToTensor()
+        )
 
-        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=64,
-                                                 shuffle=False, num_workers=2)
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=64, shuffle=False, num_workers=2
+        )
 
         model = TestNetwork(head_nodes=10)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-        classes = ('plane', 'car', 'bird', 'cat',
-                   'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+        classes = (
+            "plane",
+            "car",
+            "bird",
+            "cat",
+            "deer",
+            "dog",
+            "frog",
+            "horse",
+            "ship",
+            "truck",
+        )
 
-        learner = Learner(model, optimizer, 'test_img_class', use_gpu=False, classes=classes)
+        learner = FabricTrainer(
+            model, optimizer, "test_img_class", use_gpu=False, classes=classes
+        )
 
         learner.fit(criterion, train_loader, val_loader, epochs=2)
 

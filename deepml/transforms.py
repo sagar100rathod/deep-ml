@@ -1,19 +1,20 @@
 import numpy as np
-import torchvision
 import torch
+import torchvision
+
 from deepml import constants
 
 
 class AlbumentationTorchTranforms:
     """
-        This class is a composition of albumentations augmentation and
-        torchvision.transforms.ToTensor()
-        This first applies albumentations transformations followed by
-        torch transforms if any.
+    This class is a composition of albumentations augmentation and
+    torchvision.transforms.ToTensor()
+    This first applies albumentations transformations followed by
+    torch transforms if any.
 
-        albumentations transforms gets applied on both image and mask, however the
-        torch transforms gets applied on only on input image and not on
-        the target mask.
+    albumentations transforms gets applied on both image and mask, however the
+    torch transforms gets applied on only on input image and not on
+    the target mask.
     """
 
     def __init__(self, albu_transforms=None, torch_transforms=None):
@@ -22,10 +23,10 @@ class AlbumentationTorchTranforms:
         self.to_tensor = torchvision.transforms.ToTensor()
         self.torch_transforms = torch_transforms
 
-    '''
+    """
     Accepts image and mask in python dict as PIL.Image or np.ndarray
     return torch tensor
-    '''
+    """
 
     def __call__(self, image, mask):
 
@@ -37,7 +38,7 @@ class AlbumentationTorchTranforms:
 
         if self.albu_transforms is not None:
             augmented = self.albu_transforms(image=image, mask=mask)
-            image, mask = augmented['image'], augmented['mask']
+            image, mask = augmented["image"], augmented["mask"]
 
         if self.torch_transforms is not None:
             image = self.torch_transforms(image)
@@ -51,8 +52,8 @@ class AlbumentationTorchTranforms:
 
 
 class ImageInverseTransform:
-    """ Implementation of the inverse transform for image using mean and std_dev
-        Accepts image_batch in #B, #C, #H #W order
+    """Implementation of the inverse transform for image using mean and std_dev
+    Accepts image_batch in #B, #C, #H #W order
     """
 
     def __init__(self, mean, std):
@@ -68,20 +69,22 @@ class ImageInverseTransform:
 
 
 class ImageNetInverseTransform(ImageInverseTransform):
-    '''
-       Imagenet inverse transform
-       accepts image_batch in #B, #C, #H #W order
-   '''
+    """
+    Imagenet inverse transform
+    accepts image_batch in #B, #C, #H #W order
+    """
 
     def __init__(self):
-        super(ImageNetInverseTransform, self).__init__(constants.IMAGENET_MEAN,
-                                                       constants.IMAGENET_STD)
+        super(ImageNetInverseTransform, self).__init__(
+            constants.IMAGENET_MEAN, constants.IMAGENET_STD
+        )
 
 
 class DivideBy255:
-    '''
+    """
     Divide by 255
-    '''
+    """
+
     def __call__(self, image_batch):
         return image_batch / 255
 
@@ -96,4 +99,6 @@ class MulticlassSegmentationTargetTransform:
 
     def __call__(self, target):
         assert target.ndim == 2  # H,W
-        return torch.stack([(target == class_index) for class_index in range(self.num_classes)]).to(torch.float32)
+        return torch.stack(
+            [(target == class_index) for class_index in range(self.num_classes)]
+        ).to(torch.float32)

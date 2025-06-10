@@ -55,8 +55,8 @@ model = torchvision.models.vgg.vgg19(pretrained=False)
 
 ```python
 from deepml.tasks import ImageClassification
-classification = ImageClassification(model, model_dir="experiment1", 
-                                     load_saved_model=False, 
+classification = ImageClassification(model, model_dir="experiment1",
+                                     load_saved_model=False,
                                      classes=['class1', 'class2', 'class3'])
 ```
 
@@ -121,4 +121,3 @@ deepml is an open source project and anyone is welcome to contribute. An easy wa
 
 # License
 deepml is available under the MIT License. For details see the [LICENSE](https://github.com/sagar-rathod/PytorchDeepML/blob/master/LICENSE) file.
-

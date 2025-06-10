@@ -1,17 +1,26 @@
 import os
-from typing import List, Tuple, Callable
+from typing import Callable, List, Tuple, Union
 
-from PIL import Image
-import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
 
-from deepml.utils import get_random_samples_batch_from_loader, transform_input, transform_target, \
-    get_random_samples_batch_from_dataset
+from deepml.utils import (
+    get_random_samples_batch_from_dataset,
+    get_random_samples_batch_from_loader,
+    transform_input,
+    transform_target,
+)
 
 
-def plot_images(images: List[np.ndarray|Image.Image], labels: List[str]=None, cols:int =4,
-                figsize:Tuple[int, int] = (10, 10), fontsize: int = 14):
+def plot_images(
+    images: Union[List[np.ndarray], List[Image.Image]],
+    labels: List[str] = None,
+    cols: int = 4,
+    figsize: Tuple[int, int] = (10, 10),
+    fontsize: int = 14,
+):
     """
     Plot images with provided labels.
     :param images: The list of images of type np.array.
@@ -32,7 +41,9 @@ def plot_images(images: List[np.ndarray|Image.Image], labels: List[str]=None, co
     plt.tight_layout()
 
 
-def plot_images_with_title(image_title_generator, samples, cols=4, figsize=(10, 10), fontsize=14):
+def plot_images_with_title(
+    image_title_generator, samples, cols=4, figsize=(10, 10), fontsize=14
+):
     """
     Plots images with colored title.
     Accepts generator that yields triplet tuple (image: np.array, title: str, title color: str)
@@ -49,66 +60,98 @@ def plot_images_with_title(image_title_generator, samples, cols=4, figsize=(10, 
     rows = int(np.ceil(samples / cols))
     for index, (image, title, title_color) in enumerate(image_title_generator):
         ax = plt.subplot(rows, cols, index + 1, xticks=[], yticks=[])
-        ax.set_title(title, color=mpl.rcParams['text.color'] if title_color is None else title_color)
+        ax.set_title(
+            title,
+            color=mpl.rcParams["text.color"] if title_color is None else title_color,
+        )
         ax.title.set_fontsize(fontsize)
         plt.imshow(image)
     plt.tight_layout()
 
 
-def show_images_from_loader(loader, image_inverse_transform=None, samples=9, cols=3, figsize=(5, 5),
-                            classes=None, title_color=None):
+def show_images_from_loader(
+    loader,
+    image_inverse_transform=None,
+    samples=9,
+    cols=3,
+    figsize=(5, 5),
+    classes=None,
+    title_color=None,
+):
     """
-    Displays random samples of images from a torch.utils.data.DataLoader
-   :param loader: An instance of torch.utils.data.DataLoader returning torch.tensor of shape in order #BCWH
-   :param image_inverse_transform: The inverse transform to apply on image tensor before displaying it.
-                                   Default is None.
-                                   For imagenet normalized image tensor, use deepml.transforms.ImageNetInverseTransform
-   :param samples: The number of random image samples to display. Default is 9.
-   :param cols: The number of display columns in the matplotlib figure. Default is 3.
-   :param figsize: The matplotlib figure size. Default is (10,10)
-   :param classes: The list of class names for class indices return by torch dataset.
-   :param title_color: The title color for images.
-   :return: None
-   """
+     Displays random samples of images from a torch.utils.data.DataLoader
+    :param loader: An instance of torch.utils.data.DataLoader returning torch.tensor of shape in order #BCWH
+    :param image_inverse_transform: The inverse transform to apply on image tensor before displaying it.
+                                    Default is None.
+                                    For imagenet normalized image tensor, use deepml.transforms.ImageNetInverseTransform
+    :param samples: The number of random image samples to display. Default is 9.
+    :param cols: The number of display columns in the matplotlib figure. Default is 3.
+    :param figsize: The matplotlib figure size. Default is (10,10)
+    :param classes: The list of class names for class indices return by torch dataset.
+    :param title_color: The title color for images.
+    :return: None
+    """
     x, y = get_random_samples_batch_from_loader(loader, samples=samples)
     x = transform_input(x, image_inverse_transform)
 
-    if not classes and hasattr(loader.dataset, 'classes'):
+    if not classes and hasattr(loader.dataset, "classes"):
         classes = loader.dataset.classes
 
-    image_title_generator = ((x[index], transform_target(y[index], classes),
-                              title_color) for index in range(x.shape[0]))
-    plot_images_with_title(image_title_generator, samples=samples, cols=cols, figsize=figsize)
+    image_title_generator = (
+        (x[index], transform_target(y[index], classes), title_color)
+        for index in range(x.shape[0])
+    )
+    plot_images_with_title(
+        image_title_generator, samples=samples, cols=cols, figsize=figsize
+    )
 
 
-def show_images_from_dataset(dataset, image_inverse_transform=None, samples=9, cols=3, figsize=(10, 10),
-                             classes=None, title_color=None):
+def show_images_from_dataset(
+    dataset,
+    image_inverse_transform=None,
+    samples=9,
+    cols=3,
+    figsize=(10, 10),
+    classes=None,
+    title_color=None,
+):
     """
-    Displays random samples of images from a torch.utils.data.Dataset
-   :param dataset: An instance of torch.utils.data.Dataset returning torch.tensor of shape in order #BCWH
-   :param image_inverse_transform: The inverse transform to apply on image tensor before displaying it.
-                                   Default is None.
-                                   For imagenet normalized image tensor, use deepml.transforms.ImageNetInverseTransform
-   :param samples: The number of random image samples to display. Default is 9.
-   :param cols: The number of display columns in the matplotlib figure. Default is 3.
-   :param figsize: The matplotlib figure size. Default is (10,10)
-   :param classes: The list of class names for class indices return by torch dataset.
-   :param title_color: The title color for images.
-   :return: None
-   """
+     Displays random samples of images from a torch.utils.data.Dataset
+    :param dataset: An instance of torch.utils.data.Dataset returning torch.tensor of shape in order #BCWH
+    :param image_inverse_transform: The inverse transform to apply on image tensor before displaying it.
+                                    Default is None.
+                                    For imagenet normalized image tensor, use deepml.transforms.ImageNetInverseTransform
+    :param samples: The number of random image samples to display. Default is 9.
+    :param cols: The number of display columns in the matplotlib figure. Default is 3.
+    :param figsize: The matplotlib figure size. Default is (10,10)
+    :param classes: The list of class names for class indices return by torch dataset.
+    :param title_color: The title color for images.
+    :return: None
+    """
     x, y = get_random_samples_batch_from_dataset(dataset, samples=samples)
     x = transform_input(x, image_inverse_transform)
 
-    if not classes and hasattr(dataset, 'classes'):
+    if not classes and hasattr(dataset, "classes"):
         classes = dataset.classes
 
-    image_title_generator = ((x[index], transform_target(y[index], classes),
-                              title_color) for index in range(x.shape[0]))
-    plot_images_with_title(image_title_generator, samples=samples, cols=cols, figsize=figsize)
+    image_title_generator = (
+        (x[index], transform_target(y[index], classes), title_color)
+        for index in range(x.shape[0])
+    )
+    plot_images_with_title(
+        image_title_generator, samples=samples, cols=cols, figsize=figsize
+    )
 
 
-def show_images_from_folder(img_dir, images=None, open_file_func: Callable = None,
-                            samples=9, cols=3, figsize=(10, 10), title_color=None):
+def show_images_from_folder(
+    img_dir,
+    images=None,
+    open_file_func: Callable = None,
+    samples=9,
+    cols=3,
+    figsize=(10, 10),
+    title_color=None,
+):
     """
     Displays random samples of images from a folder or list of images.
     :param img_dir: The image directory containing images.
@@ -128,16 +171,25 @@ def show_images_from_folder(img_dir, images=None, open_file_func: Callable = Non
             images = files
 
     open_file_func = Image.open if open_file_func is None else open_file_func
-    image_generator = ((open_file_func(os.path.join(img_dir, file)), file, title_color)
-                       for file in images)
+    image_generator = (
+        (open_file_func(os.path.join(img_dir, file)), file, title_color)
+        for file in images
+    )
     plot_images_with_title(image_generator, len(images), cols=cols, figsize=figsize)
 
 
-def show_images_from_dataframe(dataframe, img_dir=None, image_file_name_column="image",
-                               label_column='label', image_filepath_column=None,
-                               open_file_func: Callable = None,
-                               samples=9, cols=3, figsize=(10, 10),
-                               title_color=None):
+def show_images_from_dataframe(
+    dataframe,
+    img_dir=None,
+    image_file_name_column="image",
+    label_column="label",
+    image_filepath_column=None,
+    open_file_func: Callable = None,
+    samples=9,
+    cols=3,
+    figsize=(10, 10),
+    title_color=None,
+):
     """
     Displays random samples of images from a dataframe using matplotlib figure.
     :param dataframe: The dataframe containing containing column for image filenames
@@ -155,8 +207,18 @@ def show_images_from_dataframe(dataframe, img_dir=None, image_file_name_column="
     """
     samples = dataframe.sample(samples)
     open_file_func = Image.open if open_file_func is None else open_file_func
-    image_generator = ((open_file_func(row_data[image_filepath_column]) if image_filepath_column else
-                        open_file_func(os.path.join(img_dir, row_data[image_file_name_column])),
-                        row_data[label_column], title_color)
-                       for _, row_data in samples.iterrows())
+    image_generator = (
+        (
+            (
+                open_file_func(row_data[image_filepath_column])
+                if image_filepath_column
+                else open_file_func(
+                    os.path.join(img_dir, row_data[image_file_name_column])
+                )
+            ),
+            row_data[label_column],
+            title_color,
+        )
+        for _, row_data in samples.iterrows()
+    )
     plot_images_with_title(image_generator, len(samples), cols=cols, figsize=figsize)
