@@ -1,8 +1,11 @@
+import sys
 import time
 
 import torch
 import torch.nn.functional as F
 import torchvision
+
+sys.path.append("..")
 
 from deepml.fabric_trainer import FabricTrainer
 from deepml.metrics.classification import Accuracy
@@ -15,7 +18,7 @@ class MnistModel(torch.nn.Module):
 
         self.conv1 = torch.nn.Conv2d(in_channels, 8, kernel_size=(5, 5))
         self.conv2 = torch.nn.Conv2d(8, 16, kernel_size=(5, 5))
-        self.linear = torch.nn.LazyLinear(out_features=num_classes)
+        self.linear = torch.nn.Linear(in_features=6400, out_features=num_classes)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -26,7 +29,10 @@ class MnistModel(torch.nn.Module):
         return self.linear(x)
 
 
-def train_mnist(devices: int = 1, accelerator: str = "cpu"):
+if __name__ == "__main__":
+
+    devices = 4  # number of devices to use, can be 1, 2, 4, etc.
+    accelerator = "cpu"  # "cpu" or "cuda" for GPU training
 
     torch.manual_seed(123)
     transform = torchvision.transforms.ToTensor()
@@ -46,21 +52,26 @@ def train_mnist(devices: int = 1, accelerator: str = "cpu"):
     )
     val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, num_workers=0)
 
-    X, y = train_dataset[0]
-
-    # need to initialize lazy layers in torch before using multiple devices in fabric
-    model.eval()
-    with torch.no_grad():
-        y_pred = model(X.unsqueeze(0))
-        # print(y_pred)
-
     start_time = time.time()
     classification = ImageClassification(
-        model, model_dir="../deepml/temp/deepml/model_weights", classes=list(range(10))
+        model, model_dir="./temp/fabric_trainer/model_weights", classes=list(range(10))
     )
     learner = FabricTrainer(
-        classification, optimizer, criterion, devices=devices, accelerator=accelerator
+        classification,
+        optimizer,
+        criterion,
+        devices=devices,
+        accelerator=accelerator,
+        precision="16-mixed",
     )
+
+    # sanity test
+    if learner.fabric.is_global_zero:
+        X, y = val_loader.dataset[0]
+        model.eval()
+        with torch.no_grad():
+            y_pred = model(X.unsqueeze(0))
+        print(y_pred)
 
     learner.fit(
         train_loader,
@@ -70,9 +81,6 @@ def train_mnist(devices: int = 1, accelerator: str = "cpu"):
         gradient_accumulation_steps=4,
     )
 
-    end_time = time.time()
-    print("Time taken (sec):", (end_time - start_time))
-
-
-if __name__ == "__main__":
-    train_mnist(devices=4, accelerator="cpu")
+    if learner.fabric.is_global_zero:
+        end_time = time.time()
+        print("Time taken (sec):", (end_time - start_time))

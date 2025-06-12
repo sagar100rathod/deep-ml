@@ -29,7 +29,6 @@ class FabricTrainer:
             Callable[[torch.optim.Optimizer], torch.optim.lr_scheduler._LRScheduler]
         ] = None,
         lr_scheduler_step_policy: str = "epoch",
-        logger: MLExperimentLogger = None,
         num_nodes: int = 1,
     ):
         """
@@ -86,11 +85,9 @@ class FabricTrainer:
         self.epochs_completed = 0
         self.best_val_loss = float("inf")
         self.history = defaultdict(list)
-        self.logger = logger
+        self.logger = None
 
-        if self.logger is None:
-            os.makedirs(self.__model_dir, exist_ok=True)
-            self.logger = TensorboardLogger(self.__model_dir)
+        os.makedirs(self.__model_dir, exist_ok=True)
 
     def set_optimizer(self, optimizer: torch.optim.Optimizer):
         assert isinstance(optimizer, torch.optim.Optimizer)
@@ -253,6 +250,7 @@ class FabricTrainer:
         resume_from_checkpoint: str = None,
         load_optimizer_state: bool = False,
         load_scheduler_state: bool = False,
+        logger: MLExperimentLogger = None,
         non_blocking: bool = True,
         image_inverse_transform: Callable = None,
         logger_img_size: Union[int, Tuple[int, int]] = None,
@@ -286,20 +284,22 @@ class FabricTrainer:
         :param gradient_clip_max_norm:  Gradient clipping is done using the norm of the gradients.
                                         Default is None which means no clipping.
 
-         :param resume_from_checkpoint: Full Path to the checkpoint file to resume training from.
+        :param resume_from_checkpoint: Full Path to the checkpoint file to resume training from.
 
-         :param load_optimizer_state: If True, it will load optimizer state from checkpoint.
+        :param load_optimizer_state: If True, it will load optimizer state from checkpoint.
 
-         :param load_scheduler_state: If True, it will load learning rate scheduler state from checkpoint.
+        :param load_scheduler_state: If True, it will load learning rate scheduler state from checkpoint.
 
-         :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
+        :param logger: MLExperimentLogger instance to log metrics and model artifacts.
 
-         :param image_inverse_transform: It denotes reverse transformations of image normalization so that images
+        :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
+
+        :param image_inverse_transform: It denotes reverse transformations of image normalization so that images
                                         can be displayed on tensor board.
                                         Default is deepml.transforms.ImageNetInverseTransform() which is
                                         an inverse of ImageNet normalization.
 
-         :param logger_img_size:  image size to use for writing images to tensorboard
+        :param logger_img_size:  image size to use for writing images to tensorboard
 
         """
 
@@ -316,21 +316,22 @@ class FabricTrainer:
             resume_from_checkpoint=resume_from_checkpoint,
             load_optimizer_state=load_optimizer_state,
             load_scheduler_state=load_scheduler_state,
+            logger=logger,
             non_blocking=non_blocking,
             image_inverse_transform=image_inverse_transform,
             logger_img_size=logger_img_size,
         )
 
         # after training is complete, load model weights back
-        latest_checkpoint_filepath = (
-            f"{os.path.join(self.__model_dir, 'latest_model')}.pt"
-        )
-
-        state_dict = torch.load(latest_checkpoint_filepath, map_location="cpu")
-        self.__model.load_state_dict(state_dict["model_state_dict"])
-        self.__optimizer.load_state_dict(state_dict["optimizer_state_dict"])
-        self.epochs_completed = state_dict.get("epoch", 0)
-        self.best_val_loss = state_dict.get("val_loss", float("inf"))
+        if self.fabric.is_global_zero:
+            latest_checkpoint_filepath = (
+                f"{os.path.join(self.__model_dir, 'latest_model')}.pt"
+            )
+            state_dict = torch.load(latest_checkpoint_filepath, map_location="cpu")
+            self.__model.load_state_dict(state_dict["model_state_dict"])
+            self.__optimizer.load_state_dict(state_dict["optimizer_state_dict"])
+            self.epochs_completed = state_dict.get("epoch", 0)
+            self.best_val_loss = state_dict.get("val_loss", float("inf"))
 
         # updater history list
         for key, value in history.items():
@@ -350,6 +351,7 @@ class FabricTrainer:
         resume_from_checkpoint: str = None,
         load_optimizer_state: bool = False,
         load_scheduler_state: bool = False,
+        logger: MLExperimentLogger = None,
         non_blocking: bool = True,
         image_inverse_transform: Callable = None,
         logger_img_size: Union[int, Tuple[int, int]] = None,
@@ -451,6 +453,18 @@ class FabricTrainer:
         ):
             FabricTrainer.__load_lr_schedular_state(lr_scheduler, state_dict)
 
+        if fabric.is_global_zero:
+            self.logger = (
+                logger if logger is not None else TensorboardLogger(self.__model_dir)
+            )
+            self.logger.log_params(
+                task=self.__predictor,
+                loader=val_loader,
+                epochs=epochs,
+                criterion=self.__criterion,
+                lr_scheduler=lr_scheduler,
+            )
+
         criterion = self.__criterion
         epochs_completed = self.epochs_completed
         best_val_loss = self.best_val_loss
@@ -466,7 +480,7 @@ class FabricTrainer:
 
             if fabric.is_global_zero:
                 print("Epoch {}/{}:".format(epoch + 1, epochs))
-                FabricTrainer.__write_lr(optimizer, epoch, self.logger, history)
+                FabricTrainer.__write_lr(optimizer, epoch + 1, self.logger, history)
 
             # training
             train_global_metrics_dict = self.__train(
@@ -612,7 +626,7 @@ class FabricTrainer:
             # separate history is used to track metrics across multiple calls to fit method
             global_metrics_dict = FabricTrainer.__init_metrics(metrics)
             training_progress_bar = tqdm(
-                total=len(train_loader), ncols=80, desc="Training", dynamic_ncols=True
+                total=len(train_loader), desc="Training", dynamic_ncols=True
             )
             # count number of steps
             step = 0

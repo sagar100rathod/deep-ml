@@ -24,7 +24,6 @@ class Learner:
         lr_scheduler_step_policy: str = "epoch",
         load_state: bool = False,
         use_amp: bool = False,
-        logger: MLExperimentLogger = None,
     ):
         """
         Training class for learning a model weights using particular task.
@@ -61,12 +60,9 @@ class Learner:
         self.epochs_completed = 0
         self.best_val_loss = np.inf
         self.history = defaultdict(list)
-        self.logger = logger
+        self.logger = None
 
-        if self.logger is None:
-            os.makedirs(self.__model_dir, exist_ok=True)
-            self.logger = TensorboardLogger(self.__model_dir)
-
+        os.makedirs(self.__model_dir, exist_ok=True)
         self.__metrics_dict = OrderedDict({"loss": 0})
 
         self.__device = self.__predictor.device
@@ -118,13 +114,13 @@ class Learner:
         if "epoch" in state_dict:
             self.epochs_completed = state_dict["epoch"]
 
-        if "metrics" in state_dict and "val_loss" in state_dict["metrics"]:
-            self.best_val_loss = state_dict["metrics"]["val_loss"]
+        if "val_loss" in state_dict:
+            self.best_val_loss = state_dict["val_loss"]
 
     def __load_optimizer_state(self, state_dict):
-        if "optimizer" in state_dict and "optimizer_state" in state_dict:
+        if "optimizer" in state_dict and "optimizer_state_dict" in state_dict:
             if state_dict["optimizer"] == self.__optimizer.__class__.__name__:
-                self.__optimizer.load_state_dict(state_dict["optimizer_state"])
+                self.__optimizer.load_state_dict(state_dict["optimizer_state_dict"])
             else:
                 print(
                     f"Skipping load optimizer state because {self.__optimizer.__class__.__name__}"
@@ -132,13 +128,13 @@ class Learner:
                 )
 
     def __load_lr_schedular_state(self, state_dict):
-        if "lr_scheduler" in state_dict and "lr_scheduler_state" in state_dict:
-            if state_dict["lr_scheduler"] == self.__lr_scheduler.__class__.__name__:
-                self.__lr_scheduler.load_state_dict(state_dict["lr_scheduler_state"])
+        if "scheduler" in state_dict and "scheduler_state_dict" in state_dict:
+            if state_dict["scheduler"] == self.__lr_scheduler.__class__.__name__:
+                self.__lr_scheduler.load_state_dict(state_dict["scheduler_state_dict"])
             else:
                 print(
                     f"Skipping load lr scheduler state because {self.__lr_scheduler.__class__.__name__}"
-                    f" != {state_dict['lr_scheduler']}"
+                    f" != {state_dict['scheduler']}"
                 )
 
     def save(
@@ -149,34 +145,30 @@ class Learner:
         train_loss: float = None,
         val_loss: float = None,
     ):
-        # Convert model into cpu before saving the model state
-        self.__model.to("cpu")
-        save_dict = {"model": self.__model.state_dict()}
+
+        state_dict = {
+            "model_state_dict": self.__model.state_dict(),
+            "criterion": self.__criterion.__class__.__name__,
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        }
 
         if save_optimizer_state:
-            save_dict["optimizer"] = self.__optimizer.__class__.__name__
-            save_dict["optimizer_state"] = self.__optimizer.state_dict()
+            state_dict["optimizer"] = self.__optimizer.__class__.__name__
+            state_dict["optimizer_state_dict"] = self.__optimizer.state_dict()
 
         if self.__lr_scheduler:
-            save_dict["lr_scheduler"] = self.__lr_scheduler.__class__.__name__
-            save_dict["lr_scheduler_state"] = self.__lr_scheduler.state_dict()
+            state_dict["scheduler"] = self.__lr_scheduler.__class__.__name__
+            state_dict["scheduler_state_dict"] = self.__lr_scheduler.state_dict()
 
         if self.__use_amp:
-            save_dict["scaler"] = self.__scaler.state_dict()
-
-        if type(epoch) == int:
-            save_dict["epoch"] = epoch
-
-        if type(train_loss) == float and type(val_loss) == float:
-            save_dict["metrics"] = {"train_loss": train_loss, "val_loss": val_loss}
-
-        save_dict["criterion"] = self.__criterion.__class__.__name__
+            state_dict["scaler"] = self.__scaler.state_dict()
 
         filepath = f"{os.path.join(self.__model_dir, tag)}.pt"
-        torch.save(save_dict, filepath)
-
+        torch.save(state_dict, filepath)
         self.logger.log_model(tag, self.__model, epoch, artifact_path=filepath)
-        self.__model.to(self.__device)
+
         return filepath
 
     @torch.no_grad()
@@ -293,12 +285,13 @@ class Learner:
         steps_per_epoch: int = None,
         save_model_after_every_epoch: int = 5,
         metrics: Dict[str, torch.nn.Module] = None,
-        image_inverse_transform: Callable = None,
-        logger_img_size: Union[int, Tuple[int, int]] = None,
-        non_blocking: bool = True,
         gradient_accumulation_steps: int = 1,
         gradient_clip_value: float = 0,
         gradient_clip_algorithm: str = "norm",
+        logger: MLExperimentLogger = None,
+        non_blocking: bool = True,
+        image_inverse_transform: Callable = None,
+        logger_img_size: Union[int, Tuple[int, int]] = None,
     ):
         """
         Trains the model on specified train loader for specified number of epochs.
@@ -318,17 +311,10 @@ class Learner:
         :param save_model_after_every_epoch: To save the model after every number of completed epochs
                                             Default is 5.
 
-        :param image_inverse_transform: It denotes reverse transformations of image normalization so that images
-                                        can be displayed on tensor board.
-                                        Default is deepml.transforms.ImageNetInverseTransform() which is
-                                        an inverse of ImageNet normalization.
-
         :param metrics: dictionary of metrics 'metric_name': metric instance to monitor.
                         Metric name is used as label for logging metric value to console and tensorboard.
                         Metric instance must be subclass of torch.nn.Module, which implements forward function and
                         returns calculated value.
-
-        :param logger_img_size:  image size to use for writing images to tensorboard
 
         :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
 
@@ -342,6 +328,15 @@ class Learner:
                                         "value" means gradient clipping is done using the value of the gradients.
                                         "agc" means adaptive gradient clipping.
                                         Should be one of ["norm", "value"].
+
+        :param logger: MLExperimentLogger instance to log the training metrics and model artifacts.
+
+        :param image_inverse_transform: It denotes reverse transformations of image normalization so that images
+                                        can be displayed on tensor board.
+                                        Default is deepml.transforms.ImageNetInverseTransform() which is
+                                        an inverse of ImageNet normalization.
+
+        :param logger_img_size:  image size to use for writing images to tensorboard
         """
         if steps_per_epoch is None:
             steps_per_epoch = len(train_loader)
@@ -356,6 +351,12 @@ class Learner:
 
         self.__model.to(self.__device)
         self.__criterion = self.__criterion.to(self.__device)
+
+        # initialize the logger if not provided
+        if self.logger is None:
+            self.logger = (
+                logger if logger is not None else TensorboardLogger(self.__model_dir)
+            )
 
         # Log params
         self.logger.log_params(

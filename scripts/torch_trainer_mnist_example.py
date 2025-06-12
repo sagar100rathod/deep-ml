@@ -1,8 +1,11 @@
+import sys
 import time
 
 import torch
 import torch.nn.functional as F
 import torchvision
+
+sys.path.append("..")
 
 from deepml.metrics.classification import Accuracy
 from deepml.tasks import ImageClassification
@@ -26,7 +29,9 @@ class MnistModel(torch.nn.Module):
         return self.linear(x)
 
 
-def train_mnist(device: str = "cpu"):
+if __name__ == "__main__":
+
+    device = "cpu"
 
     torch.manual_seed(123)
     transform = torchvision.transforms.ToTensor()
@@ -46,10 +51,13 @@ def train_mnist(device: str = "cpu"):
     )
     val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, num_workers=0)
 
+    X, y = val_loader.dataset[0]
+    print("Val Input (X, y):", X.shape, y)
+
     start_time = time.time()
     classification = ImageClassification(
         model,
-        model_dir="../deepml/temp/deepml/model_weights",
+        model_dir="./temp/torch_trainer/model_weights",
         classes=list(range(10)),
         device=device,
     )
@@ -66,7 +74,3 @@ def train_mnist(device: str = "cpu"):
 
     end_time = time.time()
     print("Time taken (sec):", (end_time - start_time))
-
-
-if __name__ == "__main__":
-    train_mnist(device="mps")
