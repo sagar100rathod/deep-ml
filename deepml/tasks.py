@@ -284,7 +284,10 @@ class NeuralNetTask(Task):
         self._model.eval()
         metrics_dict = {metric_name: 0 for metric_name in metrics.keys()}
 
-        bar = tqdm(total=len(loader), desc="{:12s}".format("Evaluation"))
+        bar = tqdm(
+            total=len(loader), desc="{:12s}".format("Evaluation"), dynamic_ncols=True
+        )
+
         for batch_index, (x, y) in enumerate(loader):
 
             outputs, x, y = self.eval_step(x, y, non_blocking)
@@ -308,7 +311,7 @@ class NeuralNetTask(Task):
             bar.set_postfix(
                 {name: f"{round(value, 4)}" for name, value in metrics_dict.items()}
             )
-
+        bar.close()
         return metrics_dict
 
 
