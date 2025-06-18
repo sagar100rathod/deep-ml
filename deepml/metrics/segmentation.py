@@ -62,6 +62,7 @@ class SegmentationMetric(torch.nn.Module, ABC):
         class_weights=None,
         target_class_index=None,
         zero_division=1.0,
+        callable=None,
     ):
         super(SegmentationMetric, self).__init__()
         self.mode = mode
@@ -73,6 +74,7 @@ class SegmentationMetric(torch.nn.Module, ABC):
         self.zero_division = zero_division
         self.activation = activation
         self.target_class_index = target_class_index
+        self.callable = callable
 
         if self.mode not in ["binary", "multiclass", "multilabel"]:
             raise ValueError(
@@ -111,6 +113,9 @@ class SegmentationMetric(torch.nn.Module, ABC):
         target: torch.LongTensor,
     ) -> tuple:
 
+        if self.callable is not None:
+            output, target = self.callable(output, target)
+
         output = self.to_class_index(output)
 
         if self.mode == "multiclass" and self.ignore_index == 0:
@@ -148,6 +153,7 @@ class Precision(SegmentationMetric):
        class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
        zero_division (float): Value to return when there is a zero division. Default is 1.0.
        target_class_index (int, optional): The class index for which to compute the precision. Default is None.
+       callabe (callable, optional): A callable function to apply to the output and target before metric calculation. Default is None.
     """
 
     def __init__(
@@ -161,6 +167,7 @@ class Precision(SegmentationMetric):
         class_weights=None,
         target_class_index=None,
         zero_division=1.0,
+        callable=None,
     ):
         super(Precision, self).__init__(
             mode=mode,
@@ -172,6 +179,7 @@ class Precision(SegmentationMetric):
             class_weights=class_weights,
             target_class_index=target_class_index,
             zero_division=zero_division,
+            callable=callable,
         )
 
     def forward(
@@ -179,6 +187,7 @@ class Precision(SegmentationMetric):
         output: Union[torch.LongTensor, torch.FloatTensor],
         target: torch.LongTensor,
     ):
+
         tp, fp, fn, tn = self._get_stats(output, target)
 
         if self.target_class_index is not None:
@@ -212,7 +221,7 @@ class Recall(SegmentationMetric):
        class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
        target_class_index (int, optional): The class index for which to compute the recall. Default is None.
        zero_division (float): Value to return when there is a zero division. Default is 1.0.
-
+       callable (callable, optional): A callable function to apply to the output and target before metric calculation. Default is None.
     """
 
     def __init__(
@@ -226,6 +235,7 @@ class Recall(SegmentationMetric):
         class_weights=None,
         target_class_index=None,
         zero_division=1.0,
+        callable=None,
     ):
         super(Recall, self).__init__(
             mode=mode,
@@ -237,6 +247,7 @@ class Recall(SegmentationMetric):
             class_weights=class_weights,
             target_class_index=target_class_index,
             zero_division=zero_division,
+            callable=callable,
         )
 
     def forward(
@@ -277,6 +288,7 @@ class F1Score(SegmentationMetric):
        class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
        target_class_index (int, optional): The class index for which to compute the f1 score. Default is None.
        zero_division (float): Value to return when there is a zero division. Default is 1.0.
+       callable (callable, optional): A callable function to apply to the output and target before metric calculation. Default is None.
     """
 
     def __init__(
@@ -290,6 +302,7 @@ class F1Score(SegmentationMetric):
         class_weights=None,
         target_class_index=None,
         zero_division=1.0,
+        callable=None,
     ):
         super(F1Score, self).__init__(
             mode=mode,
@@ -301,6 +314,7 @@ class F1Score(SegmentationMetric):
             class_weights=class_weights,
             target_class_index=target_class_index,
             zero_division=zero_division,
+            callable=callable,
         )
 
     def forward(
@@ -341,6 +355,7 @@ class IoUScore(SegmentationMetric):
        class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
        zero_division (float): Value to return when there is a zero division. Default is 1.0.
        target_class_index (int, optional): The class index for which to compute the precision. Default is None.
+       callable (callable, optional): A callable function to apply to the output and target before metric calculation. Default is None.
     """
 
     def __init__(
@@ -354,6 +369,7 @@ class IoUScore(SegmentationMetric):
         class_weights=None,
         target_class_index=None,
         zero_division=1.0,
+        callable=None,
     ):
         super(IoUScore, self).__init__(
             mode=mode,
@@ -365,6 +381,7 @@ class IoUScore(SegmentationMetric):
             class_weights=class_weights,
             target_class_index=target_class_index,
             zero_division=zero_division,
+            callable=callable,
         )
 
     def forward(
