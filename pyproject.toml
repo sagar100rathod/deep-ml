@@ -1,5 +1,5 @@
 [project]
-name = "deep-ml"
+name = "deepml"
 version = "2.0.1"
 description = "Wrapper Library for training deep neural networks using PyTorch framework."
 authors = [
