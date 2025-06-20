@@ -67,7 +67,7 @@ class Task(ABC):
                 if torch.cuda.is_available()
                 else torch.load(weights_file_path, map_location=torch.device("cpu"))
             )
-            self._model.load_state_dict(state_dict["model"])
+            self._model.load_state_dict(state_dict["model_state_dict"])
             print("Model Weights Successfully Loaded!")
         else:
             print("Failed to load model weights..!")

@@ -434,9 +434,10 @@ class FabricTrainer:
             self.epochs_completed = state_dict.get("epoch", 0)
             self.best_val_loss = state_dict.get("val_loss", float("inf"))
 
-            print(
-                f"Resuming training from epoch {self.epochs_completed} with best validation loss {self.best_val_loss}"
-            )
+            if fabric.is_global_zero:
+                print(
+                    f"Resuming training from epoch {self.epochs_completed} with best validation loss {self.best_val_loss}"
+                )
 
         model, optimizer = fabric.setup(self.__model, self.__optimizer)
         train_loader, val_loader = fabric.setup_dataloaders(train_loader, val_loader)

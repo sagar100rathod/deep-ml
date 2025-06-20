@@ -479,7 +479,7 @@ class Learner:
 
                         if (
                             self.__lr_scheduler
-                            and self.__lr_scheduler_step_policy == "batch"
+                            and self.__lr_scheduler_step_policy == "step"
                         ):
                             self.__lr_scheduler.step()
 
