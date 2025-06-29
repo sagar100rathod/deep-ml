@@ -794,10 +794,9 @@ class FabricTrainer:
                     step = step + 1
 
                     # Convert all_batch_metrics to dict with metric names
+                    # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
                     all_batch_metrics = {
-                        name: all_batch_metrics[
-                            :, i
-                        ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                        name: all_batch_metrics[:, i]
                         for i, name in enumerate(local_batch_metrics_dict.keys())
                     }
 
