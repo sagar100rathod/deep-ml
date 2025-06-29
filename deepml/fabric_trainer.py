@@ -627,7 +627,9 @@ class FabricTrainer:
             # separate history is used to track metrics across multiple calls to fit method
             global_metrics_dict = FabricTrainer.__init_metrics(metrics)
             training_progress_bar = tqdm(
-                total=len(train_loader), desc="Training", dynamic_ncols=True
+                total=len(train_loader),
+                desc="{:12s}".format("Training"),
+                dynamic_ncols=True,
             )
             # count number of steps
             step = 0
@@ -685,12 +687,30 @@ class FabricTrainer:
                     outputs, y, metrics, local_batch_metrics_dict
                 )
 
+                # collect metric values from all processes using tensor type, avoid dict type
+                values = torch.tensor(
+                    list(local_batch_metrics_dict.values()),
+                    device=fabric.device,
+                    dtype=torch.float32,
+                )
+
                 # all_gather is used to aggregate the value across processes
-                all_batch_metrics = fabric.all_gather(local_batch_metrics_dict)
+                all_batch_metrics = fabric.all_gather(
+                    values
+                )  # returns tensor of shape (world_size, num_metrics)
 
                 # Aggregate metrics across all processes
                 if fabric.is_global_zero:
                     step = step + 1
+
+                    # Convert all_batch_metrics to dict with metric names
+                    all_batch_metrics = {
+                        name: all_batch_metrics[
+                            :, i
+                        ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                        for i, name in enumerate(local_batch_metrics_dict.keys())
+                    }
+
                     FabricTrainer.__update_metrics_with_simple_moving_average(
                         all_batch_metrics, global_metrics_dict, step
                     )
@@ -726,7 +746,7 @@ class FabricTrainer:
             global_metrics_dict = FabricTrainer.__init_metrics(metrics)
             validation_progress_bar = tqdm(
                 total=len(loader),
-                desc="Validation",
+                desc="{:12s}".format("Validation"),
                 dynamic_ncols=True,
                 leave=True,
             )
@@ -756,13 +776,31 @@ class FabricTrainer:
                     outputs, y, metrics, local_batch_metrics_dict
                 )
 
+                # collect metric values from all processes using tensor type, avoid dict type
+                values = torch.tensor(
+                    list(local_batch_metrics_dict.values()),
+                    device=fabric.device,
+                    dtype=torch.float32,
+                )
+
                 # all_gather is used to aggregate the value across processes
-                all_batch_metrics = fabric.all_gather(local_batch_metrics_dict)
+                all_batch_metrics = fabric.all_gather(
+                    values
+                )  # returns tensor of shape (world_size, num_metrics)
 
                 # Aggregate metrics across all processes
                 if fabric.is_global_zero:
                     validation_progress_bar.update(1)
                     step = step + 1
+
+                    # Convert all_batch_metrics to dict with metric names
+                    all_batch_metrics = {
+                        name: all_batch_metrics[
+                            :, i
+                        ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                        for i, name in enumerate(local_batch_metrics_dict.keys())
+                    }
+
                     FabricTrainer.__update_metrics_with_simple_moving_average(
                         all_batch_metrics, global_metrics_dict, step
                     )
