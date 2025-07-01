@@ -703,6 +703,10 @@ class FabricTrainer:
                 if fabric.is_global_zero:
                     step = step + 1
 
+                    all_batch_metrics = all_batch_metrics.view(
+                        fabric.world_size, len(local_batch_metrics_dict)
+                    )
+
                     # Convert all_batch_metrics to dict with metric names
                     all_batch_metrics = {
                         name: all_batch_metrics[
@@ -792,6 +796,10 @@ class FabricTrainer:
                 if fabric.is_global_zero:
                     validation_progress_bar.update(1)
                     step = step + 1
+
+                    all_batch_metrics = all_batch_metrics.view(
+                        fabric.world_size, len(local_batch_metrics_dict)
+                    )
 
                     # Convert all_batch_metrics to dict with metric names
                     # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
