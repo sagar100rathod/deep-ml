@@ -46,6 +46,9 @@ if __name__ == "__main__":
 
     model = MnistModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+    lr_scheduler_fn = lambda optimizer: torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, factor=0.1, patience=10
+    )
     criterion = torch.nn.CrossEntropyLoss()
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=16, num_workers=0, shuffle=True
@@ -63,6 +66,8 @@ if __name__ == "__main__":
         devices=devices,
         accelerator=accelerator,
         precision="16-mixed",
+        lr_scheduler_fn=lr_scheduler_fn,
+        lr_scheduler_step_policy="epoch",
     )
 
     # sanity test

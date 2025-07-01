@@ -739,7 +739,7 @@ class FabricTrainer:
         model.eval()
         local_batch_metrics_dict = FabricTrainer.__init_metrics(metrics)
         validation_progress_bar = None
-        global_metrics_dict = OrderedDict()
+        global_metrics_dict = FabricTrainer.__init_metrics(metrics)
         step = 0
 
         if fabric.is_global_zero:
