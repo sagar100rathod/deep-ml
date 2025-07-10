@@ -147,7 +147,11 @@ class Learner:
     ):
 
         state_dict = {
-            "model_state_dict": self.__model.state_dict(),
+            "model_state_dict": (
+                self.__model.module.state_dict()
+                if isinstance(self.__model, torch.nn.DataParallel)
+                else self.__model.state_dict()
+            ),
             "criterion": self.__criterion.__class__.__name__,
             "epoch": epoch,
             "train_loss": train_loss,
