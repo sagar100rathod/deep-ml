@@ -3,6 +3,7 @@ import sys
 import time
 
 import numpy as np
+import segmentation_models_pytorch as smp
 import torch
 import torch.nn.functional as F
 import torchvision
@@ -63,14 +64,15 @@ class SyntheticShapesDataset(torch.utils.data.Dataset):
         return img, mask
 
 
-class BinaryBCELogitsLoss(torch.nn.Module):
+class JaccardBCELogitsLoss(torch.nn.Module):
     def __init__(self):
         super(BinaryBCELogitsLoss, self).__init__()
-        self.loss = torch.nn.BCEWithLogitsLoss()
+        self.bce = torch.nn.BCEWithLogitsLoss()
+        self.jaccard = smp.losses.JaccardLoss(mode="binary", from_logits=True)
 
     def forward(self, inputs, targets):
         # Ensure inputs are logits
-        return self.loss(
+        return self.jaccard(inputs, targets) + self.bce(
             inputs, targets.to(torch.float32)
         )  # Remove channel dimension for binary segmentation
 
@@ -89,7 +91,7 @@ if __name__ == "__main__":
 
     model = ResNetUNet(n_class=1)  # ['background', 'triangle']
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
-    criterion = BinaryBCELogitsLoss()
+    criterion = JaccardBCELogitsLoss()
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=5, num_workers=0, shuffle=True
     )

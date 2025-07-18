@@ -153,4 +153,4 @@ def blend(
         rgb_image.shape == mask.shape
     ), f"RGB image shape {rgb_image.shape} and mask shape {mask.shape} must match"
 
-    return (rgb_image * alpha + mask * beta).to(torch.uint8)
+    return (rgb_image * alpha + mask * beta).clip(0, 255).to(torch.uint8)
