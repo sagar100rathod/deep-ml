@@ -126,3 +126,31 @@ def get_random_samples_batch_from_dataset(dataset, samples=8):
         targets = torch.stack(targets)
 
     return samples, targets
+
+
+def blend(
+    rgb_image: torch.Tensor, mask: torch.Tensor, alpha: float = 0.6, beta: float = 0.4
+) -> np.array:
+    """
+    Blends an RGB image with a mask using specified alpha and beta values.
+    :param rgb_image: torch.Tensor of size BCHW, RGB image to blend with the mask of size #HWC or #HW
+    :param mask: torch.Tensor, torch.Tensor of size BCHW , mask to blend with the RGB image of size #HWC or #HW
+    :param alpha: alpha blending factor for the RGB image
+    :param beta: beta blending factor for the mask
+    :return: torch.Tensor of original size, blended image
+    """
+    if mask.ndim == 4 and mask.shape[1] == 1:  # mask dim is B, C, H, W
+        # Expand mask to match RGB channels
+        # -1 keep the dimension unchanged
+        # expand does not allocate new memory, it just creates a view, however repeat() creates a copy of new tensor
+        mask = mask.expand(-1, 3, -1, -1)
+
+    elif mask.ndim == 3:  # mask dim is B, H, W
+        # Expand mask to match RGB channels
+        mask = mask.unsqueeze(1).expand(-1, 3, -1, -1)
+
+    assert (
+        rgb_image.shape == mask.shape
+    ), f"RGB image shape {rgb_image.shape} and mask shape {mask.shape} must match"
+
+    return (rgb_image * alpha + mask * beta).to(torch.uint8)

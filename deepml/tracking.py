@@ -33,6 +33,12 @@ class MLExperimentLogger(ABC):
     ):
         pass
 
+    @abstractmethod
+    def log_image(
+        self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
+    ):
+        pass
+
 
 class TensorboardLogger(MLExperimentLogger):
 
@@ -85,6 +91,13 @@ class TensorboardLogger(MLExperimentLogger):
     ):
         self.log_artifact(tag, value, step, artifact_path)
 
+    def log_image(
+        self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
+    ):
+        if isinstance(value, torch.Tensor) and value.ndim == 4:
+            self.writer.add_images(tag, value, step)
+            self.writer.flush()
+
 
 class MLFlowLogger(MLExperimentLogger):
 
@@ -109,14 +122,17 @@ class MLFlowLogger(MLExperimentLogger):
     def log_artifact(
         self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
     ):
-
-        if isinstance(value, dict):
-            self.mlflow.pytorch.log_model(value, tag)
+        pass
 
     def log_model(
         self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
     ):
-        self.log_artifact(tag, value, step, artifact_path)
+        self.mlflow.log_artifact(artifact_path, artifact_path=tag)
+
+    def log_image(
+        self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
+    ):
+        self.mlflow.log_image(value, key=tag, step=step)
 
 
 class WandbLogger(MLExperimentLogger):
@@ -170,3 +186,8 @@ class WandbLogger(MLExperimentLogger):
                 for artifact in list(artifact.collection.artifacts()):
                     if artifact.version != latest_artifact_version:
                         artifact.delete()
+
+    def log_image(
+        self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
+    ):
+        pass

@@ -143,6 +143,8 @@ cython_debug/
 .DS_Store
 
 deepml/data/
+deepml/__pycache__
 notebooks/data/
 tests/data/
 scripts/data
+scripts/mlruns

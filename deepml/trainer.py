@@ -509,17 +509,6 @@ class Learner:
 
             self.epochs_completed = self.epochs_completed + 1
 
-            # Write some sample training images to logger
-            if logger_img_size is not None:
-                self.__predictor.write_prediction_to_logger(
-                    "train",
-                    train_loader,
-                    self.logger,
-                    image_inverse_transform,
-                    self.epochs_completed,
-                    img_size=logger_img_size,
-                )
-
             train_loss = self.__metrics_dict["loss"]
             self.__write_metrics_to_logger("train", self.epochs_completed)
             self.__write_history("train")

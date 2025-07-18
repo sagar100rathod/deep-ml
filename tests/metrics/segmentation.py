@@ -101,6 +101,18 @@ def test_precision_recall_target_class_index():
     recall = Recall(mode="multiclass", num_classes=3, target_class_index=2)
     assert pytest.approx(recall(probs, gt), 0.001) == 0.5
 
+    # Test for multiple images
+    probs = torch.stack([class1_prob, class2_prob, class3_prob]).unsqueeze(dim=0)
+    precision = Precision(
+        mode="multiclass", num_classes=3, target_class_index=0, reduction="macro"
+    )
+
+    print(
+        precision(
+            torch.concatenate([probs, probs], dim=0), torch.concatenate([gt, gt], dim=0)
+        )
+    )
+
 
 def test_precision_recall_multilabel():
     gt_class_0 = torch.tensor([[1, 0, 1], [0, 1, 1], [0, 0, 0]])

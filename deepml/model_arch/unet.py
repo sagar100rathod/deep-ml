@@ -41,6 +41,7 @@ class ResNetUNet(nn.Module):
         self.conv_original_size1 = convrelu(64, 64, 3, 1)
         self.conv_original_size2 = convrelu(64 + 128, 64, 3, 1)
 
+        self.num_classes = n_class
         self.conv_last = nn.Conv2d(64, n_class, 1)
 
     def forward(self, input):

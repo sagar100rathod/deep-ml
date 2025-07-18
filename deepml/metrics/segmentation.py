@@ -190,11 +190,14 @@ class Precision(SegmentationMetric):
 
         tp, fp, fn, tn = self._get_stats(output, target)
 
+        # tp shape is [N, C] where N is the batch size and C is the number of classes
+        # for each image in the batch, we have tp, fp, fn, tn for each class
+
         if self.target_class_index is not None:
-            tp = tp[0][self.target_class_index]
-            fp = fp[0][self.target_class_index]
-            fn = fn[0][self.target_class_index]
-            tn = tn[0][self.target_class_index]
+            tp = tp[:, self.target_class_index]
+            fp = fp[:, self.target_class_index]
+            fn = fn[:, self.target_class_index]
+            tn = tn[:, self.target_class_index]
 
         return precision(
             tp=tp,
@@ -257,11 +260,14 @@ class Recall(SegmentationMetric):
     ):
         tp, fp, fn, tn = self._get_stats(output, target)
 
+        # tp shape is [N, C] where N is the batch size and C is the number of classes
+        # for each image in the batch, we have tp, fp, fn, tn for each class
+
         if self.target_class_index is not None:
-            tp = tp[0][self.target_class_index]
-            fp = fp[0][self.target_class_index]
-            fn = fn[0][self.target_class_index]
-            tn = tn[0][self.target_class_index]
+            tp = tp[:, self.target_class_index]
+            fp = fp[:, self.target_class_index]
+            fn = fn[:, self.target_class_index]
+            tn = tn[:, self.target_class_index]
 
         return recall(
             tp=tp,
@@ -324,11 +330,14 @@ class F1Score(SegmentationMetric):
     ):
         tp, fp, fn, tn = self._get_stats(output, target)
 
+        # tp shape is [N, C] where N is the batch size and C is the number of classes
+        # for each image in the batch, we have tp, fp, fn, tn for each class
+
         if self.target_class_index is not None:
-            tp = tp[0][self.target_class_index]
-            fp = fp[0][self.target_class_index]
-            fn = fn[0][self.target_class_index]
-            tn = tn[0][self.target_class_index]
+            tp = tp[:, self.target_class_index]
+            fp = fp[:, self.target_class_index]
+            fn = fn[:, self.target_class_index]
+            tn = tn[:, self.target_class_index]
 
         return f1_score(
             tp=tp,
@@ -391,11 +400,14 @@ class IoUScore(SegmentationMetric):
     ):
         tp, fp, fn, tn = self._get_stats(output, target)
 
+        # tp shape is [N, C] where N is the batch size and C is the number of classes
+        # for each image in the batch, we have tp, fp, fn, tn for each class
+
         if self.target_class_index is not None:
-            tp = tp[0][self.target_class_index]
-            fp = fp[0][self.target_class_index]
-            fn = fn[0][self.target_class_index]
-            tn = tn[0][self.target_class_index]
+            tp = tp[:, self.target_class_index]
+            fp = fp[:, self.target_class_index]
+            fn = fn[:, self.target_class_index]
+            tn = tn[:, self.target_class_index]
 
         return iou_score(
             tp=tp,
