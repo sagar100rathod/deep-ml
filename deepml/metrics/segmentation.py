@@ -54,7 +54,7 @@ class SegmentationMetric(torch.nn.Module, ABC):
     def __init__(
         self,
         mode: str = "binary",
-        reduction=None,
+        reduction: str = "macro",
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -159,7 +159,7 @@ class Precision(SegmentationMetric):
     def __init__(
         self,
         mode: str = "binary",
-        reduction=None,
+        reduction: str = "macro",
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -230,7 +230,7 @@ class Recall(SegmentationMetric):
     def __init__(
         self,
         mode: str = "binary",
-        reduction=None,
+        reduction: str = "macro",
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -300,7 +300,7 @@ class F1Score(SegmentationMetric):
     def __init__(
         self,
         mode: str = "binary",
-        reduction=None,
+        reduction: str = "macro",
         activation=None,
         ignore_index=None,
         threshold=None,

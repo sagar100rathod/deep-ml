@@ -535,6 +535,17 @@ class FabricTrainer:
                     history,
                 )
 
+                # write random val images to tensorboard
+                if logger_img_size is not None:
+                    self.__predictor.write_prediction_to_logger(
+                        "val",
+                        val_loader,
+                        self.logger,
+                        image_inverse_transform,
+                        epochs_completed,
+                        img_size=logger_img_size,
+                    )
+
                 message = f"\nTrain Loss: {train_loss:.4f} Val Loss: {val_loss:.4f}"
 
                 # Save best validation model

@@ -106,9 +106,22 @@ class MLFlowLogger(MLExperimentLogger):
     except ImportError as e:
         pass
 
-    def __init__(self, experiment_name: str = "Default", tracking_uri: str = None):
+    def __init__(
+        self,
+        experiment_name: str = "Default",
+        tracking_uri: str = None,
+        log_model_weights: bool = True,
+    ):
+        """
+        Initializes the MLFlowLogger with the specified experiment name and tracking URI.
+        :param experiment_name:
+        :param tracking_uri:
+        :param log_model_weights: whether to log model weights as artifacts.
+        """
+
         super().__init__()
         self.mlflow.set_experiment(experiment_name)
+        self.log_model_weights = log_model_weights
 
         if tracking_uri:
             self.mlflow.set_tracking_uri(tracking_uri)
@@ -127,11 +140,17 @@ class MLFlowLogger(MLExperimentLogger):
     def log_model(
         self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
     ):
-        self.mlflow.log_artifact(artifact_path, artifact_path=tag)
+        if self.log_model_weights:
+            self.mlflow.log_artifact(artifact_path, artifact_path=f"{tag}_epoch_{step}")
 
     def log_image(
         self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
     ):
+        """
+        Logs an image to MLFlow.
+        :param tag: The tag for the image.
+        :param value: The image data, can be a numpy array or a PIL Image.
+        """
         self.mlflow.log_image(value, key=tag, step=step)
 
 

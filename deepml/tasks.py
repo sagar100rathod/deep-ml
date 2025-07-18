@@ -577,7 +577,7 @@ class Segmentation(NeuralNetTask):
             self._model.eval()
 
             with torch.no_grad():
-                x, targets = get_random_samples_batch_from_loader(loader)
+                x, targets = get_random_samples_batch_from_loader(loader, samples=4)
                 predictions, x, targets = self.eval_step(x, targets, **kwargs)
 
                 x = self.transform_input(x, image_inverse_transform).cpu()  # BCHW
