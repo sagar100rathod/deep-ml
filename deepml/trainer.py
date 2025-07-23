@@ -420,7 +420,7 @@ class Learner:
                         # Enable autocast for mixed precision training
                         with torch.autocast(
                             dtype=torch.float16,
-                            device_type=self.__device,
+                            device_type=str(self.__device),
                             enabled=self.__use_amp,
                         ):
                             outputs, x, y = self.__predictor.train_step(
