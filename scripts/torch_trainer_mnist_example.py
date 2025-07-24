@@ -62,7 +62,7 @@ if __name__ == "__main__":
         device=device,
     )
 
-    learner = Learner(classification, optimizer, criterion)
+    learner = Learner(classification, optimizer, criterion, use_amp=True)
 
     learner.fit(
         train_loader,

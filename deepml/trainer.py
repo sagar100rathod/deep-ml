@@ -12,6 +12,8 @@ import deepml.tasks
 from deepml.tasks import Task
 from deepml.tracking import MLExperimentLogger, TensorboardLogger
 
+MAC_TORCH_2_2_2 = "2.2.2"  # Minimum torch version required for this module
+
 
 class Learner:
 
@@ -69,7 +71,13 @@ class Learner:
 
         # gradient scaler for mixed precision training
         # The same GradScaler instance should be used for the entire convergence run, if multiple calls to fit are used.
-        self.__scaler = torch.cuda.amp.GradScaler(self.__device, enabled=self.__use_amp)
+        # torch.amp.GradScaler is not defined for MAC torch 2.2.2, so we use torch.cuda.amp.GradScaler
+        if torch.__version__ != MAC_TORCH_2_2_2:
+            self.__scaler = torch.amp.GradScaler(self.__device, enabled=self.__use_amp)
+        else:
+            self.__scaler = torch.cuda.amp.GradScaler(
+                self.__device, enabled=self.__use_amp
+            )
 
         if load_state:
             self.__load_state()
