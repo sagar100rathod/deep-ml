@@ -102,30 +102,24 @@ def get_random_samples_batch_from_loader(loader, samples=None):
 
     if len(loader) == 0:
         raise ValueError("Loader is empty")
-    return get_random_samples_batch_from_dataset(
+    sample_batch: list = get_random_samples_batch_from_dataset(
         loader.dataset, loader.batch_size if samples is None else samples
     )
+    return loader.collate_fn(sample_batch)
 
 
-def get_random_samples_batch_from_dataset(dataset, samples=8):
-
+def get_random_samples_batch_from_dataset(dataset, samples=8) -> list:
+    """
+    Returns a random batch of samples from the dataset.
+    :param dataset: torch.utils.data.Dataset or any iterable dataset
+    :param samples: no. of samples to return, defaults to 8
+    :return: list of samples from the dataset
+    """
     if len(dataset) == 0:
         raise ValueError("Dataset is empty")
 
     indexes = np.random.randint(0, len(dataset), samples)
-    samples, targets = [], []
-    for index in indexes:
-        x, y = dataset[index]
-        samples.append(x)
-        targets.append(y)
-
-    if isinstance(samples[0], torch.Tensor):
-        samples = torch.stack(samples)
-
-    if isinstance(targets[0], torch.Tensor):
-        targets = torch.stack(targets)
-
-    return samples, targets
+    return [dataset[index] for index in indexes]
 
 
 def blend(

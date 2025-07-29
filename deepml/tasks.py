@@ -289,7 +289,7 @@ class NeuralNetTask(Task):
             raise Exception("Loader cannot be None.")
 
         self._model.eval()
-        metrics_dict = {metric_name: 0 for metric_name in metrics.keys()}
+        metrics_dict = {metric_name: 0.0 for metric_name in metrics.keys()}
 
         bar = tqdm(
             total=len(loader), desc="{:12s}".format("Evaluation"), dynamic_ncols=True
@@ -552,6 +552,95 @@ class Segmentation(NeuralNetTask):
         # return tensor of size (B, C, H, W) for RGB images
         return torch.stack(decoded_images)
 
+    def log_prediction(
+        self,
+        tag: str,
+        predictions: torch.Tensor,
+        x: torch.Tensor,
+        targets: torch.Tensor,
+        logger: MLExperimentLogger,
+        image_inverse_transform: Callable,
+        global_step: int,
+        img_size: Union[int, Tuple[int, int], None] = 224,
+        **kwargs: dict,
+    ):
+        """
+        Logs the input images, target masks and output masks to the logger.
+        Override this method to customize the logging behavior.
+
+        :param tag: The tag to use for logging the images
+        :param predictions: The model predictions in #BHW format or #BCHW format
+        :param x: The input images in #BCHW format
+        :param targets: The target masks in #BHW format or #BCHW format
+        :param logger: The logger instance to use for logging the images
+        :param image_inverse_transform: A callable to transform the input images back to original format
+        :param global_step: The global step to use for logging the images
+        :param img_size: The size to resize the images to. If None, no resizing is done.
+        :param kwargs:  Additional keyword arguments to pass to the eval_step method
+        :return:
+        """
+        x = self.transform_input(x, image_inverse_transform).cpu()  # BCHW
+        target_mask = self.decode_segmentation_mask(targets.cpu())  # BCHW
+        class_indices = self.transform_output(predictions).cpu()  # BHW
+        output_mask = self.decode_segmentation_mask(class_indices)  # BCHW
+
+        x = (x * 255.0).to(torch.uint8)  # Convert to uint8 for visualization
+
+        target_segmentation = blend(x, target_mask)  # B, C, H, W
+        output_segmentation = blend(x, output_mask)  # B, C, H, W
+
+        # Resize images to img_size
+        x = F.interpolate(x, size=img_size, mode="bilinear", align_corners=False)
+        target_segmentation = F.interpolate(
+            target_segmentation,
+            size=img_size,
+            mode="bilinear",
+            align_corners=False,
+        )
+        target_mask = F.interpolate(
+            target_mask,
+            size=img_size,
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        output_segmentation = F.interpolate(
+            output_segmentation,
+            size=img_size,
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        output_mask = F.interpolate(
+            output_mask,
+            size=img_size,
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        images = []
+        for t in zip(
+            x,
+            target_mask,
+            target_segmentation,
+            output_mask,
+            output_segmentation,
+        ):
+            images.extend(t)
+
+        images = torch.stack(images)  # B * 5, C, H, W
+
+        # nrow is number of images in a row, first is input, second is target mask, third is target mask overlay,
+        # 4th is output mask, 5th is output mask overlay
+
+        image_grid = torchvision.utils.make_grid(
+            images, nrow=5, padding=5, pad_value=255
+        )
+
+        image_grid = image_grid.permute(1, 2, 0).cpu().numpy()  # CHW --> HWC
+
+        logger.log_image(tag, image_grid, global_step)
+
     def write_prediction_to_logger(
         self,
         tag: str,
@@ -563,7 +652,7 @@ class Segmentation(NeuralNetTask):
         **kwargs: dict,
     ):
         """
-        Writes Input, Target and prediction images to the tensorboard if img_size is not None
+        Writes Input, Target and prediction images to the logger
         :param tag:
         :param loader:
         :param logger:
@@ -573,76 +662,21 @@ class Segmentation(NeuralNetTask):
         :return:
         """
 
-        if img_size is not None:
-            self._model.eval()
-
-            with torch.no_grad():
-                x, targets = get_random_samples_batch_from_loader(loader, samples=4)
-                predictions, x, targets = self.eval_step(x, targets, **kwargs)
-
-                x = self.transform_input(x, image_inverse_transform).cpu()  # BCHW
-                target_mask = self.decode_segmentation_mask(targets.cpu())  # BCHW
-                class_indices = self.transform_output(predictions).cpu()  # BHW
-                output_mask = self.decode_segmentation_mask(class_indices)  # BCHW
-
-                x = (x * 255.0).to(torch.uint8)  # Convert to uint8 for visualization
-
-                target_segmentation = blend(x, target_mask)  # B, C, H, W
-                output_segmentation = blend(x, output_mask)  # B, C, H, W
-
-                # Resize images to img_size
-                x = F.interpolate(
-                    x, size=img_size, mode="bilinear", align_corners=False
-                )
-                target_segmentation = F.interpolate(
-                    target_segmentation,
-                    size=img_size,
-                    mode="bilinear",
-                    align_corners=False,
-                )
-                target_mask = F.interpolate(
-                    target_mask,
-                    size=img_size,
-                    mode="bilinear",
-                    align_corners=False,
-                )
-
-                output_segmentation = F.interpolate(
-                    output_segmentation,
-                    size=img_size,
-                    mode="bilinear",
-                    align_corners=False,
-                )
-
-                output_mask = F.interpolate(
-                    output_mask,
-                    size=img_size,
-                    mode="bilinear",
-                    align_corners=False,
-                )
-
-                images = []
-                for t in zip(
-                    x,
-                    target_mask,
-                    target_segmentation,
-                    output_mask,
-                    output_segmentation,
-                ):
-                    images.extend(t)
-
-                images = torch.stack(images)  # B * 5, C, H, W
-
-                # nrow is number of images in a row, first is input, second is target mask, third is target mask overlay,
-                # 4th is output mask, 5th is output mask overlay
-
-                image_grid = torchvision.utils.make_grid(
-                    images, nrow=5, padding=5, pad_value=255
-                )
-
-                image_grid = image_grid.permute(1, 2, 0).cpu().numpy()  # CHW --> HWC
-
-                logger.log_image(tag, image_grid, global_step)
+        self._model.eval()
+        with torch.no_grad():
+            x, targets = get_random_samples_batch_from_loader(loader, samples=4)
+            predictions, x, targets = self.eval_step(x, targets, **kwargs)
+            self.log_prediction(
+                tag,
+                predictions,
+                x,
+                targets,
+                logger,
+                image_inverse_transform,
+                global_step,
+                img_size,
+                **kwargs,
+            )
 
 
 class ImageRegression(NeuralNetTask):

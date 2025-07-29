@@ -66,7 +66,7 @@ class SyntheticShapesDataset(torch.utils.data.Dataset):
 
 class JaccardBCELogitsLoss(torch.nn.Module):
     def __init__(self):
-        super(BinaryBCELogitsLoss, self).__init__()
+        super(JaccardBCELogitsLoss, self).__init__()
         self.bce = torch.nn.BCEWithLogitsLoss()
         self.jaccard = smp.losses.JaccardLoss(mode="binary", from_logits=True)
 
