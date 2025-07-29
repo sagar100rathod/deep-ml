@@ -54,7 +54,7 @@ class SegmentationMetric(torch.nn.Module, ABC):
     def __init__(
         self,
         mode: str = "binary",
-        reduction: str = "macro",
+        reduction: str = "macro-imagewise",
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -145,7 +145,8 @@ class Precision(SegmentationMetric):
 
     Args:
        mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'Binary'.
-       reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'. Default is None.
+       reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted', 'micro-imagewise', 'macro-imagewise', 'weighted-imagewise'.
+                                 Default is "macro-imagewise". Reference link: https://smp.readthedocs.io/en/latest/metrics.html#segmentation_models_pytorch.metrics.functional.precision
        activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
        ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
        threshold (float, optional): Threshold value for binarizing the output. Default is None.
@@ -159,7 +160,7 @@ class Precision(SegmentationMetric):
     def __init__(
         self,
         mode: str = "binary",
-        reduction: str = "macro",
+        reduction: str = "macro-imagewise",
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -216,7 +217,9 @@ class Recall(SegmentationMetric):
 
     Args:
        mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'Binary'.
-       reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'. Default is None.
+       reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted', 'micro-imagewise', 'macro-imagewise', 'weighted-imagewise'.
+                                 Default is 'macro-imagewise'. Reference link: https://smp.readthedocs.io/en/latest/metrics.html#segmentation_models_pytorch.metrics.functional.precision
+
        activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
        ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
        threshold (float, optional): Threshold value for binarizing the output. Default is None.
@@ -230,7 +233,7 @@ class Recall(SegmentationMetric):
     def __init__(
         self,
         mode: str = "binary",
-        reduction: str = "macro",
+        reduction: str = "macro-imagewise",
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -300,7 +303,7 @@ class F1Score(SegmentationMetric):
     def __init__(
         self,
         mode: str = "binary",
-        reduction: str = "macro",
+        reduction: str = "macro-imagewise",
         activation=None,
         ignore_index=None,
         threshold=None,
@@ -356,7 +359,7 @@ class IoUScore(SegmentationMetric):
 
     Args:
        mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'Binary'.
-       reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'. Default is None.
+       reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted'.  Default is None.
        activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
        ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
        threshold (float, optional): Threshold value for binarizing the output. Default is None.
@@ -370,7 +373,7 @@ class IoUScore(SegmentationMetric):
     def __init__(
         self,
         mode: str = "binary",
-        reduction=None,
+        reduction: str = "macro-imagewise",
         activation=None,
         ignore_index=None,
         threshold=None,

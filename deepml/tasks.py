@@ -295,6 +295,7 @@ class NeuralNetTask(Task):
             total=len(loader), desc="{:12s}".format("Evaluation"), dynamic_ncols=True
         )
 
+        total_samples = 0
         for batch_index, (x, y) in enumerate(loader):
 
             outputs, x, y = self.eval_step(x, y, non_blocking)
@@ -309,16 +310,20 @@ class NeuralNetTask(Task):
             ):
                 y = y.view_as(outputs)
 
+            batch_size = x.size(0)
+            total_samples += batch_size
+
             for metric_name, metric_instance in metrics.items():
-                metrics_dict[metric_name] = metrics_dict[metric_name] + (
-                    (metric_instance(outputs, y).item() - metrics_dict[metric_name])
-                    / (batch_index + 1)
-                )
+                metric_value = metric_instance(outputs, y).item()
+                metrics_dict[metric_name] += metric_value * batch_size
+
             bar.update(1)
-            bar.set_postfix(
-                {name: f"{round(value, 4)}" for name, value in metrics_dict.items()}
-            )
+
         bar.close()
+
+        for metric_name in metrics_dict.keys():
+            metrics_dict[metric_name] = metrics_dict[metric_name] / total_samples
+
         return metrics_dict
 
 
