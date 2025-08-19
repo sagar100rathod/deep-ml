@@ -209,4 +209,12 @@ class WandbLogger(MLExperimentLogger):
     def log_image(
         self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None
     ):
-        pass
+        """
+        Logs an image to Wandb.
+        :param tag:
+        :param value:
+        :param step:
+        :param artifact_path:
+        :return:
+        """
+        self.wandb.log({tag: self.wandb.Image(value)}, step=step)
