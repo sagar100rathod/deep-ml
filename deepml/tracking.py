@@ -217,4 +217,4 @@ class WandbLogger(MLExperimentLogger):
         :param artifact_path:
         :return:
         """
-        self.wandb.log({tag: self.wandb.Image(value)}, step=step)
+        self.wandb.log({tag: self.wandb.Image(value)})
