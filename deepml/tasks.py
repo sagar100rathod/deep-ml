@@ -543,20 +543,19 @@ class Segmentation(NeuralNetTask):
         for i in range(class_indices.shape[0]):
 
             if self.mode == "binary":
-                image = Image.fromarray(class_indices[i] * 255)
+                image_arr = np.zeros_like(class_indices[i])  # HW
+                image_arr[class_indices[i] > 0] = 255
+                image_arr = image_arr[np.newaxis, ...]  # CHW for grayscale
             else:
                 image = Image.fromarray(class_indices[i], mode="P")
                 image.putpalette(self.palette)
                 image = image.convert("RGB")
-
-            image_arr = np.array(image)  # HWC for RGB or HW for grayscale
-
-            if image_arr.ndim == 3:
+                image_arr = np.array(image)  # HWC for RGB
                 image_arr = image_arr.transpose(2, 0, 1)  # Convert to CHW format
 
             decoded_images.append(torch.from_numpy(image_arr))
 
-        # return tensor of size (B, C, H, W) for RGB images or (B, H, W) for grayscale images
+        # return tensor of size (B, C, H, W) for both RGB and grayscale images
         return torch.stack(decoded_images)
 
     def log_prediction(
