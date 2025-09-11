@@ -90,7 +90,7 @@ class Task(ABC):
 
     def move_input_to_device(
         self,
-        x: Union[torch.Tensor, list, tuple],
+        x: Union[torch.Tensor, list, tuple, dict],
         device: Union[torch.device, str, None] = None,
         non_blocking: bool = False,
         **kwargs: dict,
