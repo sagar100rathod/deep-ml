@@ -102,12 +102,32 @@ class Task(ABC):
         if isinstance(x, torch.Tensor):
             x = x.to(device, non_blocking=non_blocking)
         elif isinstance(x, list):  # list of torch tensors
-            x = [i.to(device, non_blocking=non_blocking) for i in x]
+            x = [
+                (
+                    i.to(device, non_blocking=non_blocking)
+                    if isinstance(i, torch.Tensor)
+                    else i
+                )
+                for i in x
+            ]
         elif isinstance(x, tuple):  # tuple of torch tensors
-            x = tuple([i.to(device, non_blocking=non_blocking) for i in x])
+            x = tuple(
+                [
+                    (
+                        i.to(device, non_blocking=non_blocking)
+                        if isinstance(i, torch.Tensor)
+                        else i
+                    )
+                    for i in x
+                ]
+            )
         elif isinstance(x, dict):  # dict values as torch tensors
             x = {
-                key: value.to(device, non_blocking=non_blocking)
+                key: (
+                    value.to(device, non_blocking=non_blocking)
+                    if isinstance(value, torch.Tensor)
+                    else value
+                )
                 for key, value in x.items()
             }
 
