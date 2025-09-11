@@ -215,6 +215,7 @@ class Learner:
                 ):
                     y = y.view_as(outputs)
 
+                y = self.__predictor.move_input_to_device(y)
                 loss = criterion(outputs, y)
 
                 self.__metrics_dict["loss"] = self.__metrics_dict["loss"] + (
@@ -421,6 +422,8 @@ class Learner:
 
                 for batch_index, (x, y) in enumerate(train_loader):
 
+                    y = self.__predictor.move_input_to_device(y)
+
                     if self.__use_amp:
                         # Enable autocast for mixed precision training
                         with torch.autocast(
@@ -439,7 +442,6 @@ class Learner:
                             ):
                                 y = y.view_as(outputs)
 
-                            y = self.__predictor.move_input_to_device(y)
                             loss = self.__criterion(outputs, y)
                             loss = (
                                 loss / gradient_accumulation_steps
