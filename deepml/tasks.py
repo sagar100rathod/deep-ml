@@ -336,6 +336,7 @@ class Segmentation(NeuralNetTask):
         self,
         model: torch.nn.Module,
         model_dir: str,
+        mode: str = "binary",
         load_saved_model: bool = False,
         model_file_name: str = "latest_model.pt",
         device: str = "auto",
@@ -347,6 +348,7 @@ class Segmentation(NeuralNetTask):
 
         :param model: The model architecture defined using torch.nn.Module
         :param model_dir:
+        :param mode : The mode of segmentation, either 'binary' or 'multiclass'. Default is 'binary'.
         :param load_saved_model:
         :param model_file_name:
         :param device: The device to use for model inference. Default is "auto" which uses cuda if available,
@@ -370,6 +372,7 @@ class Segmentation(NeuralNetTask):
             num_classes >= 1
         ), "for segmentation task, it should be greater than 1 class"
 
+        self.mode = mode
         self.num_classes = num_classes
         self.threshold = threshold
 
@@ -377,7 +380,7 @@ class Segmentation(NeuralNetTask):
             assert isinstance(color_map, dict)
             self.class_index_to_color = color_map
         else:
-            if self.num_classes == 1:
+            if self.mode == "binary":
                 self.class_index_to_color = {0: 0, 1: 255}
             else:
                 self.class_index_to_color = {0: [0, 0, 0]}
@@ -391,7 +394,7 @@ class Segmentation(NeuralNetTask):
         self.__create_color_palette()
 
     def __create_color_palette(self):
-        if self.num_classes == 1:
+        if self.mode == "binary":
             self.palette = [0, 0, 0, 255, 255, 255]
         else:
             self.palette = (
@@ -532,29 +535,28 @@ class Segmentation(NeuralNetTask):
         :param class_indices: batch of segmentation mask in #BHW format
         :return: batch of decoded RGB images in #BCHW format
         """
-
-        # for binary # TODO: handle for multilabel
-        if class_indices.ndim == 4 and class_indices.shape[1] == 1:  # B,C,H,W
-            class_indices = class_indices.squeeze(
-                dim=1
-            )  # Remove channel dimension for binary segmentation
-
         # Convert to numpy array
         class_indices = class_indices.cpu().numpy().astype(np.uint8)
+
         decoded_images = []
         # For each image in the batch
         for i in range(class_indices.shape[0]):
-            image = Image.fromarray(class_indices[i], mode="P")
-            image.putpalette(self.palette)
-            image = image.convert("RGB")
-            image_arr = np.array(image)  # HWC
+
+            if self.mode == "binary":
+                image = Image.fromarray(class_indices[i] * 255)
+            else:
+                image = Image.fromarray(class_indices[i], mode="P")
+                image.putpalette(self.palette)
+                image = image.convert("RGB")
+
+            image_arr = np.array(image)  # HWC for RGB or HW for grayscale
 
             if image_arr.ndim == 3:
                 image_arr = image_arr.transpose(2, 0, 1)  # Convert to CHW format
 
             decoded_images.append(torch.from_numpy(image_arr))
 
-        # return tensor of size (B, C, H, W) for RGB images
+        # return tensor of size (B, C, H, W) for RGB images or (B, H, W) for grayscale images
         return torch.stack(decoded_images)
 
     def log_prediction(
@@ -585,9 +587,13 @@ class Segmentation(NeuralNetTask):
         :return:
         """
         x = self.transform_input(x, image_inverse_transform).cpu()  # BCHW
-        target_mask = self.decode_segmentation_mask(targets.cpu())  # BCHW
+        target_mask = self.decode_segmentation_mask(
+            targets.cpu()
+        )  # (B, C, H, W) for RGB images or (B, H, W) for grayscale images
         class_indices = self.transform_output(predictions).cpu()  # BHW
-        output_mask = self.decode_segmentation_mask(class_indices)  # BCHW
+        output_mask = self.decode_segmentation_mask(
+            class_indices
+        )  # (B, C, H, W) for RGB images or (B, H, W) for grayscale images
 
         x = (x * 255.0).to(torch.uint8)  # Convert to uint8 for visualization
 
