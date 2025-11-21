@@ -51,9 +51,15 @@ if __name__ == "__main__":
     )
     criterion = torch.nn.CrossEntropyLoss()
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=16, num_workers=0, shuffle=True
+        train_dataset, batch_size=13, num_workers=0, shuffle=True, drop_last=True
     )
-    val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, num_workers=0)
+    val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=13, num_workers=0)
+
+    print("Train Samples:", len(train_dataset))
+    print("Val Samples:", len(test_dataset))
+    print("Batch Size:", train_loader.batch_size)
+    print("Train Iterations in an Epoch:", len(train_loader))
+    print("Val Iterations in an Epoch:", len(val_loader))
 
     start_time = time.time()
     classification = ImageClassification(

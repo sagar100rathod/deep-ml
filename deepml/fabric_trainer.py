@@ -514,37 +514,19 @@ class FabricTrainer:
             # After each epoch completed, write metrics to logger
             if fabric.is_global_zero:
 
+                epochs_completed = epochs_completed + 1
+                self.__log_metrics(
+                    val_loader,
+                    train_global_metrics_dict,
+                    val_global_metrics_dict,
+                    history,
+                    epochs_completed,
+                    logger_img_size,
+                    image_inverse_transform,
+                )
+
                 train_loss = train_global_metrics_dict["loss"]
                 val_loss = val_global_metrics_dict["loss"]
-
-                epochs_completed = epochs_completed + 1
-
-                FabricTrainer.__write_metrics_to_logger(
-                    train_global_metrics_dict,
-                    "train",
-                    epochs_completed,
-                    self.logger,
-                    history,
-                )
-
-                FabricTrainer.__write_metrics_to_logger(
-                    val_global_metrics_dict,
-                    "val",
-                    epochs_completed,
-                    self.logger,
-                    history,
-                )
-
-                # write random val images to tensorboard
-                if logger_img_size is not None:
-                    self.__predictor.write_prediction_to_logger(
-                        "val",
-                        val_loader,
-                        self.logger,
-                        image_inverse_transform,
-                        epochs_completed,
-                        img_size=logger_img_size,
-                    )
 
                 message = f"\nTrain Loss: {train_loss:.4f} Val Loss: {val_loss:.4f}"
 
@@ -566,6 +548,22 @@ class FabricTrainer:
                 # Log info message to console only global zero process
                 tqdm.write(message)
 
+                if epochs_completed % save_model_after_every_epoch == 0:
+                    last_checkpoint = "epoch_{}_model".format(epochs_completed)
+                    self.save(
+                        last_checkpoint,
+                        model,
+                        optimizer,
+                        criterion,
+                        lr_scheduler,
+                        epoch=epochs_completed,
+                        train_loss=train_loss,
+                        val_loss=val_loss,
+                    )
+
+            # Ensure all processes are synchronized before proceeding next epoch
+            fabric.barrier()
+
             # LR Scheduler step after each epoch
             if lr_scheduler is not None and self.__lr_scheduler_step_policy == "epoch":
                 if val_loader and isinstance(
@@ -574,23 +572,6 @@ class FabricTrainer:
                     lr_scheduler.step(val_global_metrics_dict["loss"])
                 else:
                     lr_scheduler.step()
-
-            # Save model checkpoints after every save_model_after_every_epoch
-            if (
-                fabric.is_global_zero
-                and epochs_completed % save_model_after_every_epoch == 0
-            ):
-                last_checkpoint = "epoch_{}_model".format(epochs_completed)
-                self.save(
-                    last_checkpoint,
-                    model,
-                    optimizer,
-                    criterion,
-                    lr_scheduler,
-                    epoch=epochs_completed,
-                    train_loss=train_loss,
-                    val_loss=val_loss,
-                )
 
         # Save latest model at the end
         if fabric.is_global_zero:
@@ -834,6 +815,47 @@ class FabricTrainer:
 
         return global_metrics_dict
 
+    def __log_metrics(
+        self,
+        val_loader: torch.utils.data.DataLoader,
+        train_metrics: dict,
+        val_metrics: dict,
+        metrics_history: dict,
+        epochs_completed: int,
+        logger_img_size: Union[int, Tuple[int, int]],
+        image_inverse_transform: Callable,
+    ):
+
+        train_loss = train_metrics["loss"]
+        val_loss = val_metrics["loss"]
+
+        FabricTrainer.__write_metrics_to_logger(
+            train_metrics,
+            "train",
+            epochs_completed,
+            self.logger,
+            metrics_history,
+        )
+
+        FabricTrainer.__write_metrics_to_logger(
+            val_metrics,
+            "val",
+            epochs_completed,
+            self.logger,
+            metrics_history,
+        )
+
+        # write random val images to tensorboard
+        if logger_img_size is not None:
+            self.__predictor.write_prediction_to_logger(
+                "val",
+                val_loader,
+                self.logger,
+                image_inverse_transform,
+                epochs_completed,
+                img_size=logger_img_size,
+            )
+
     def predict(self, loader):
         predictions, targets = self.__predictor.predict(loader)
         return predictions, targets
@@ -841,38 +863,6 @@ class FabricTrainer:
     def predict_class(self, loader):
         predicted_class, probability, targets = self.__predictor.predict_class(loader)
         return predicted_class, probability, targets
-
-    def extract_features(
-        self, loader, no_of_features, features_csv_file, iterations=1, target_known=True
-    ):
-
-        fp = open(features_csv_file, "w")
-        csv_writer = csv.writer(fp)
-
-        # define feature columns
-        cols = ["feat_{}".format(i) for i in range(0, no_of_features)]
-
-        if target_known:
-            cols = ["class"] + cols
-
-        csv_writer.writerow(cols)
-        fp.flush()
-
-        self.__model.eval()
-        with torch.no_grad():
-            for iteration in range(iterations):
-                print("Iteration:", iteration + 1)
-                for x, y in tqdm(loader, total=len(loader), desc="Feature Extraction"):
-
-                    feature_set, x, y = self.__predictor.eval_step(x, y).cpu().numpy()
-
-                    if target_known:
-                        y = y.numpy().reshape(-1, 1)
-                        feature_set = np.hstack([y, feature_set])
-
-                    csv_writer.writerows(feature_set)
-                    fp.flush()
-        fp.close()
 
     def show_predictions(
         self,

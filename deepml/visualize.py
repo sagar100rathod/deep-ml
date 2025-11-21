@@ -15,7 +15,7 @@ from deepml.utils import (
 
 
 def plot_images(
-    images: Union[List[np.ndarray], List[Image.Image]],
+    images: List[np.ndarray],
     labels: List[str] = None,
     cols: int = 4,
     figsize: Tuple[int, int] = (10, 10),
