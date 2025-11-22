@@ -60,7 +60,6 @@ class FabricTrainer:
         self.__model = self.__predictor.model
         self.__model_dir = self.__predictor.model_dir
         self.__model_file_name = self.__predictor.model_file_name
-        self.__device = self.__predictor.device
         self.__optimizer = None
         self.__criterion = None
         self.__lr_scheduler_fn = lr_scheduler_fn
@@ -82,6 +81,7 @@ class FabricTrainer:
             num_nodes=num_nodes,
         )
 
+        self.__predictor._device = self.fabric.device
         self.epochs_completed = 0
         self.best_val_loss = float("inf")
         self.history = defaultdict(list)
