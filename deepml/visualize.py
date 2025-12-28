@@ -1,7 +1,8 @@
 import os
-from typing import Callable, List, Tuple, Union
+from typing import Callable, List, Tuple
 
 import matplotlib as mpl
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -22,13 +23,17 @@ def plot_images(
     fontsize: int = 14,
 ):
     """
-    Plot images with provided labels.
-    :param images: The list of images of type np.array.
-    :param labels: The corresponding labels for images.
-    :param cols: The number of cols. Default is 4.
-    :param figsize: The matplotlib figure size. Default is (10,10)
-    :param fontsize: The fontsize for title display. Default is 14.
-    :return: None
+    Display a grid of images with optional labels using matplotlib.
+
+    Args:
+        images (List[np.ndarray]): List of images as numpy arrays.
+        labels (List[str], optional): List of labels for each image. Defaults to None.
+        cols (int, optional): Number of columns in the grid. Defaults to 4.
+        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
+        fontsize (int, optional): Font size for image titles. Defaults to 14.
+
+    Returns:
+        None
     """
     plt.figure(figsize=figsize)
     rows = int(np.ceil(len(images) / cols))
@@ -42,30 +47,132 @@ def plot_images(
 
 
 def plot_images_with_title(
-    image_title_generator, samples, cols=4, figsize=(10, 10), fontsize=14
+    image_generator, samples: int, cols=4, figsize=(10, 10), fontsize=14
 ):
     """
-    Plots images with colored title.
-    Accepts generator that yields triplet tuple (image: np.array, title: str, title color: str)
+    Display a grid of images with colored titles using matplotlib.
 
-    :param image_title_generator: The generator returning tuples (image, title, title color)
-    :param samples: The total number of samples in generator.
-    :param cols: The number of columns. Default is 4.
-    :param figsize: The matplotlib figure size. Default is (10,10)
-    :param fontsize: The fontsize for title display. Default is 14.
-    :return: None
+    Args:
+        image_generator: Generator yielding tuples (image: np.ndarray, title: str, title_color: Optional[str]).
+                        The title color is optional.
+        samples (int): Total number of images to display.
+        cols (int, optional): Number of columns in the grid. Defaults to 4.
+        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
+        fontsize (int, optional): Font size for image titles. Defaults to 14.
+
+    Returns:
+        None
     """
 
     plt.figure(figsize=figsize)
     rows = int(np.ceil(samples / cols))
-    for index, (image, title, title_color) in enumerate(image_title_generator):
+    for index, (image, title, title_color) in enumerate(image_generator):
         ax = plt.subplot(rows, cols, index + 1, xticks=[], yticks=[])
         ax.set_title(
             title,
             color=mpl.rcParams["text.color"] if title_color is None else title_color,
         )
         ax.title.set_fontsize(fontsize)
-        plt.imshow(image)
+        ax.imshow(image)
+
+    plt.show()
+    plt.tight_layout()
+
+
+def plot_images_with_bboxes(
+    image_generator,
+    samples: int,
+    cols=4,
+    figsize=(10, 10),
+    fontsize=14,
+    classes: List[str] = None,
+    class_color_map: dict = None,
+    cmap: str = "tab10",
+):
+    """
+    Display a grid of images with bounding boxes and class labels using matplotlib.
+
+    Args:
+        image_generator: Generator yielding tuples (image: np.ndarray, title: str, bboxes: List[List[float]]).
+                         Each bbox is [id, xmin, ymin, width, height] where id may be an int index or label.
+        samples (int): Total number of images to display.
+        cols (int, optional): Number of columns in the grid. Defaults to 4.
+        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
+        fontsize (int, optional): Font size for image titles and bbox labels. Defaults to 14.
+        classes (List[str], optional): Optional list mapping class indices to class names.
+        class_color_map (dict, optional): Mapping from class id or class name to a color string (e.g. '#ff0000').
+        cmap (str, optional): Matplotlib colormap name used as fallback when class_color_map does not provide a color.
+
+    Returns:
+        None
+    """
+
+    plt.figure(figsize=figsize)
+    rows = int(np.ceil(samples / cols))
+
+    cmap_obj = mpl.cm.get_cmap(cmap)
+    cmap_n = getattr(cmap_obj, "N", 10)
+
+    def _get_color_for_class(key):
+        # Try direct mapping by provided map (allow int or str keys)
+        if class_color_map:
+            if key in class_color_map:
+                return class_color_map[key]
+            key_str = str(key)
+            if key_str in class_color_map:
+                return class_color_map[key_str]
+
+        # Fallback: derive an index from key (int or hashed) and use cmap
+        try:
+            idx = int(key)  # if key is numeric index
+        except Exception:
+            idx = abs(hash(str(key))) % cmap_n
+        rgba = cmap_obj(idx % cmap_n)
+        # convert rgba to hex for consistent use with bbox background
+        return mpl.colors.to_hex(rgba)
+
+    for index, (image, title, bboxes) in enumerate(image_generator):
+        ax = plt.subplot(rows, cols, index + 1, xticks=[], yticks=[])
+        ax.set_title(title, color=mpl.rcParams["text.color"])
+        ax.title.set_fontsize(fontsize)
+        ax.imshow(image)
+
+        if bboxes is not None:
+            for cls_id, xmin, ymin, width, height in bboxes:
+
+                # resolve label text and color
+                label_text = (
+                    classes[cls_id]
+                    if (classes and isinstance(cls_id, int) and cls_id < len(classes))
+                    else str(cls_id)
+                )
+                color = _get_color_for_class(cls_id)
+
+                # Create a rectangle patch
+                rect = patches.Rectangle(
+                    (xmin, ymin),
+                    width,
+                    height,
+                    linewidth=1,
+                    edgecolor="r",
+                    facecolor="none",
+                )
+
+                ax.add_patch(rect)
+
+                # Draw label box (ensure label sits inside image bounds)
+                text_x = xmin
+                text_y = max(ymin - 2, 0)
+                ax.text(
+                    text_x,
+                    text_y,
+                    label_text,
+                    fontsize=max(int(fontsize * 0.7), 8),
+                    color="white",
+                    verticalalignment="bottom",
+                    bbox=dict(facecolor=color, alpha=0.8, pad=0.2, edgecolor="none"),
+                )
+    plt.show()
     plt.tight_layout()
 
 
@@ -79,17 +186,19 @@ def show_images_from_loader(
     title_color=None,
 ):
     """
-     Displays random samples of images from a torch.utils.data.DataLoader
-    :param loader: An instance of torch.utils.data.DataLoader returning torch.tensor of shape in order #BCWH
-    :param image_inverse_transform: The inverse transform to apply on image tensor before displaying it.
-                                    Default is None.
-                                    For imagenet normalized image tensor, use deepml.transforms.ImageNetInverseTransform
-    :param samples: The number of random image samples to display. Default is 9.
-    :param cols: The number of display columns in the matplotlib figure. Default is 3.
-    :param figsize: The matplotlib figure size. Default is (10,10)
-    :param classes: The list of class names for class indices return by torch dataset.
-    :param title_color: The title color for images.
-    :return: None
+    Display random samples of images from a DataLoader using matplotlib.
+
+    Args:
+        loader: torch.utils.data.DataLoader returning image and label tensors.
+        image_inverse_transform (callable, optional): Function to inverse-transform images before display.
+        samples (int, optional): Number of images to display. Defaults to 9.
+        cols (int, optional): Number of columns in the grid. Defaults to 3.
+        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (5, 5).
+        classes (List[str], optional): List of class names for labels.
+        title_color (str, optional): Color for image titles.
+
+    Returns:
+        None
     """
     x, y = get_random_samples_batch_from_loader(loader, samples=samples)
     x = transform_input(x, image_inverse_transform)
@@ -116,17 +225,19 @@ def show_images_from_dataset(
     title_color=None,
 ):
     """
-     Displays random samples of images from a torch.utils.data.Dataset
-    :param dataset: An instance of torch.utils.data.Dataset returning torch.tensor of shape in order #BCWH
-    :param image_inverse_transform: The inverse transform to apply on image tensor before displaying it.
-                                    Default is None.
-                                    For imagenet normalized image tensor, use deepml.transforms.ImageNetInverseTransform
-    :param samples: The number of random image samples to display. Default is 9.
-    :param cols: The number of display columns in the matplotlib figure. Default is 3.
-    :param figsize: The matplotlib figure size. Default is (10,10)
-    :param classes: The list of class names for class indices return by torch dataset.
-    :param title_color: The title color for images.
-    :return: None
+    Display random samples of images from a Dataset using matplotlib.
+
+    Args:
+        dataset: torch.utils.data.Dataset returning image and label tensors.
+        image_inverse_transform (callable, optional): Function to inverse-transform images before display.
+        samples (int, optional): Number of images to display. Defaults to 9.
+        cols (int, optional): Number of columns in the grid. Defaults to 3.
+        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
+        classes (List[str], optional): List of class names for labels.
+        title_color (str, optional): Color for image titles.
+
+    Returns:
+        None
     """
     x, y = get_random_samples_batch_from_dataset(dataset, samples=samples)
     x = transform_input(x, image_inverse_transform)
@@ -153,15 +264,19 @@ def show_images_from_folder(
     title_color=None,
 ):
     """
-    Displays random samples of images from a folder or list of images.
-    :param img_dir: The image directory containing images.
-    :param images: The list of image filenames. Default is None.
-    :param open_file_func: user defined callable function to open image file.
-    :param samples: The number of random image samples to display. Default is 9.
-    :param cols: The number of display columns in the matplotlib figure. Default is 3.
-    :param figsize: The matplotlib figure size. Default is (10,10)
-    :param title_color: The title color for images.
-    :return: None
+    Display random samples of images from a folder or list using matplotlib.
+
+    Args:
+        img_dir (str): Directory containing image files.
+        images (List[str], optional): List of image filenames. If None, all files in img_dir are used.
+        open_file_func (callable, optional): Function to open image files. Defaults to PIL.Image.open.
+        samples (int, optional): Number of images to display. Defaults to 9.
+        cols (int, optional): Number of columns in the grid. Defaults to 3.
+        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
+        title_color (str, optional): Color for image titles.
+
+    Returns:
+        None
     """
     if not images:
         files = os.listdir(img_dir)
@@ -182,28 +297,37 @@ def show_images_from_dataframe(
     dataframe,
     img_dir=None,
     image_file_name_column="image",
-    label_column="label",
     image_filepath_column=None,
     open_file_func: Callable = None,
+    label_column: str = None,
+    bbox_label_column: str = None,
     samples=9,
     cols=3,
     figsize=(10, 10),
-    title_color=None,
+    classes=None,
+    class_color_map: dict = None,
+    cmap: str = "tab10",
 ):
     """
-    Displays random samples of images from a dataframe using matplotlib figure.
-    :param dataframe: The dataframe containing containing column for image filenames
-    :param img_dir: The image directory. Default is None. If None, dataframe image filename column supposed
-                    to contain full path to the image file.
-    :param image_file_name_column: The name of the column containing image file names. Default is "image".
-    :param label_column: The label columns containing the title for image file to be displayed. Default is 'label'.
-    :param image_filepath_column: Direct filepath str as an attribute
-    :param open_file_func: user defined callable function to open image file.
-    :param samples: The number of random image samples to display. Default is 9.
-    :param cols: The number of display columns in the matplotlib figure. Default is 3.
-    :param figsize: The matplotlib figure size. Default is (10,10)
-    :param title_color: The title color for images.
-    :return: None
+    Display random samples of images from a DataFrame using matplotlib.
+
+    Args:
+        dataframe (pd.DataFrame): DataFrame containing image file info.
+        img_dir (str, optional): Directory containing images. If None, file paths must be absolute.
+        image_file_name_column (str, optional): Column name for image filenames. Defaults to "image".
+        image_filepath_column (str, optional): Column name for absolute image file paths.
+        open_file_func (callable, optional): Function to open image files. Defaults to PIL.Image.open.
+        label_column (str, optional): Column name for image labels.
+        bbox_label_column (str, optional): Column name for bounding boxes (list of [id, x_min, y_min, width, height]).
+        samples (int, optional): Number of images to display. Defaults to 9.
+        cols (int, optional): Number of columns in the grid. Defaults to 3.
+        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
+        classes (List[str], optional): List of class names for bbox labels.
+        class_color_map (dict, optional): Mapping from class id or class name to a color string (e.g. '#ff0000').
+        cmap (str, optional): Matplotlib colormap name used as fallback when class_color_map does not provide a color.
+
+    Returns:
+        None
     """
     samples = dataframe.sample(samples)
     open_file_func = Image.open if open_file_func is None else open_file_func
@@ -216,9 +340,23 @@ def show_images_from_dataframe(
                     os.path.join(img_dir, row_data[image_file_name_column])
                 )
             ),
-            row_data[label_column],
-            title_color,
+            f"idx: {row_idx}" if label_column is None else row_data["label_column"],
+            None if bbox_label_column is None else row_data[bbox_label_column],
         )
-        for _, row_data in samples.iterrows()
+        for row_idx, row_data in samples.iterrows()
     )
-    plot_images_with_title(image_generator, len(samples), cols=cols, figsize=figsize)
+
+    if bbox_label_column is not None:
+        plot_images_with_bboxes(
+            image_generator,
+            len(samples),
+            cols=cols,
+            figsize=figsize,
+            classes=classes,
+            class_color_map=class_color_map,
+            cmap=cmap,
+        )
+    else:
+        plot_images_with_title(
+            image_generator, len(samples), cols=cols, figsize=figsize
+        )
