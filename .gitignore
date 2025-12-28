@@ -148,3 +148,5 @@ notebooks/data/
 tests/data/
 scripts/data
 scripts/mlruns
+out/
+*.iml
