@@ -752,7 +752,6 @@ class ImageRegression(NeuralNetTask):
             x = self.transform_input(x, image_inverse_transform)
             # #BCHW --> #BHWC
             x = x.permute([0, 2, 3, 1])
-            title_color = None
 
             def create_title(y, prediction):
                 prediction = self.transform_output(prediction)
@@ -762,7 +761,7 @@ class ImageRegression(NeuralNetTask):
                     return f"{y}\nPrediction={prediction}"
 
             image_title_generator = (
-                (x[index], create_title(y[index], predictions[index]), title_color)
+                (x[index], create_title(y[index], predictions[index]), None)
                 for index in range(x.shape[0])
             )
 
