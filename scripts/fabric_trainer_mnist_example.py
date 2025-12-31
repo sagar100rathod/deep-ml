@@ -10,6 +10,7 @@ sys.path.append("..")
 from deepml.fabric_trainer import FabricTrainer
 from deepml.metrics.classification import Accuracy
 from deepml.tasks import ImageClassification
+from deepml.tracking import MLFlowLogger
 
 
 class MnistModel(torch.nn.Module):
@@ -51,9 +52,11 @@ if __name__ == "__main__":
     )
     criterion = torch.nn.CrossEntropyLoss()
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=13, num_workers=0, shuffle=True, drop_last=True
+        train_dataset, batch_size=16, num_workers=0, shuffle=True, drop_last=True
     )
-    val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=13, num_workers=0)
+    val_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=16, num_workers=0, shuffle=False, drop_last=True
+    )
 
     print("Train Samples:", len(train_dataset))
     print("Val Samples:", len(test_dataset))
@@ -71,7 +74,7 @@ if __name__ == "__main__":
         criterion,
         devices=devices,
         accelerator=accelerator,
-        precision="16-mixed",
+        precision="32-true",
         lr_scheduler_fn=lr_scheduler_fn,
         lr_scheduler_step_policy="epoch",
     )
@@ -90,6 +93,7 @@ if __name__ == "__main__":
         epochs=10,
         metrics={"acc": Accuracy()},
         gradient_accumulation_steps=4,
+        logger=MLFlowLogger(),
     )
 
     if learner.fabric.is_global_zero:

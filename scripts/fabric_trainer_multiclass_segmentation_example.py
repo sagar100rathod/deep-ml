@@ -4,7 +4,6 @@ import time
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torchvision
 from PIL import Image, ImageDraw
 
@@ -84,7 +83,7 @@ if __name__ == "__main__":
     transform = torchvision.transforms.ToTensor()
 
     train_dataset = SyntheticShapesDataset(
-        length=250, img_size=128, transform=transform
+        length=500, img_size=128, transform=transform
     )
     val_dataset = SyntheticShapesDataset(length=50, img_size=128, transform=transform)
 
@@ -92,9 +91,9 @@ if __name__ == "__main__":
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=2, num_workers=0, shuffle=True
+        train_dataset, batch_size=8, num_workers=0, shuffle=True
     )
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=2, num_workers=0)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=8, num_workers=0)
 
     X, y = val_loader.dataset[0]
     print("Val Input (X, y):", X.shape, y.shape)
@@ -103,6 +102,7 @@ if __name__ == "__main__":
     segmentation = Segmentation(
         model,
         model_dir="./temp/torch_trainer/seg_model_weights",
+        mode="multiclass",
         num_classes=30,
         device=device,
     )
@@ -113,50 +113,44 @@ if __name__ == "__main__":
     learner.fit(
         train_loader,
         val_loader,
-        epochs=10,
+        epochs=50,
         metrics={
-            "precision": Precision(mode="multiclass", reduction="macro", num_classes=4),
-            "recall": Recall(mode="multiclass", reduction="macro", num_classes=4),
+            "precision": Precision(mode="multiclass", num_classes=4),
+            "recall": Recall(mode="multiclass", num_classes=4),
             "precision_circle": Precision(
                 mode="multiclass",
-                reduction="macro",
                 num_classes=4,
                 target_class_index=1,
             ),
             "precision_square": Precision(
                 mode="multiclass",
-                reduction="macro",
                 num_classes=4,
                 target_class_index=2,
             ),
             "precision_triangle": Precision(
                 mode="multiclass",
-                reduction="macro",
                 num_classes=4,
                 target_class_index=3,
             ),
             "recall_circle": Recall(
                 mode="multiclass",
-                reduction="macro",
                 num_classes=4,
                 target_class_index=1,
             ),
             "recall_square": Recall(
                 mode="multiclass",
-                reduction="macro",
                 num_classes=4,
                 target_class_index=2,
             ),
             "recall_triangle": Recall(
                 mode="multiclass",
-                reduction="macro",
                 num_classes=4,
                 target_class_index=3,
             ),
         },
         gradient_accumulation_steps=2,
         logger=logger,
-        logger_img_size=224,
+        logger_img_size=128,
     )
 
     end_time = time.time()

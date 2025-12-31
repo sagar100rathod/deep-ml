@@ -2,18 +2,16 @@ import os
 from collections import OrderedDict, defaultdict
 from typing import Callable, Dict, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from lightning_fabric import Fabric
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-import deepml.tasks
+from deepml.base import BaseLearner
 from deepml.tasks import Task
 from deepml.tracking import MLExperimentLogger, TensorboardLogger
 
 
-class FabricTrainer:
+class FabricTrainer(BaseLearner):
 
     def __init__(
         self,
@@ -29,6 +27,7 @@ class FabricTrainer:
         ] = None,
         lr_scheduler_step_policy: str = "epoch",
         num_nodes: int = 1,
+        fabric_plugins: Optional = None,
     ):
         """
         Training class for learning a model weights using particular task.
@@ -52,25 +51,16 @@ class FabricTrainer:
                                          Use "step" policy if you want lr_scheduler.step() to be
                                          called after each gradient step.
         :param num_nodes: The number of nodes to use for distributed training.
+        :param fabric_plugins: Optional plugins to pass to Fabric for custom behaviors.
+                               Like DeepSpeedPlugin for DeepSpeed integration.
+                               BitsandbytesPlugin for memory efficient training with 8-bit optimizers etc.
+                               Example:
+                               from lightning_fabric.plugins import BitsandbytesPrecision
+                               plugin = BitsandbytesPrecision(mode="int8")
         """
-        assert isinstance(task, Task)
-
-        self.__predictor = task
-        self.__model = self.__predictor.model
-        self.__model_dir = self.__predictor.model_dir
-        self.__model_file_name = self.__predictor.model_file_name
-        self.__optimizer = None
-        self.__criterion = None
-        self.__lr_scheduler_fn = lr_scheduler_fn
-
-        assert lr_scheduler_step_policy in [
-            "epoch",
-            "step",
-        ], "lr_scheduler_step_policy should be either 'epoch' or 'step'"
-        self.__lr_scheduler_step_policy = lr_scheduler_step_policy
-
-        self.set_optimizer(optimizer)
-        self.set_criterion(criterion)
+        super().__init__(
+            task, optimizer, criterion, lr_scheduler_fn, lr_scheduler_step_policy
+        )
 
         self.fabric = Fabric(
             accelerator=accelerator,
@@ -78,163 +68,16 @@ class FabricTrainer:
             devices=devices,
             precision=precision,
             num_nodes=num_nodes,
+            plugins=fabric_plugins,
         )
 
-        self.__predictor._device = self.fabric.device
+        self._task._device = self.fabric.device
         self.epochs_completed = 0
         self.best_val_loss = float("inf")
         self.history = defaultdict(list)
         self.logger = None
 
-        os.makedirs(self.__model_dir, exist_ok=True)
-
-    def set_optimizer(self, optimizer: torch.optim.Optimizer):
-        assert isinstance(optimizer, torch.optim.Optimizer)
-        self.__optimizer = optimizer
-
-    def set_criterion(self, criterion: torch.nn.Module):
-        assert isinstance(criterion, torch.nn.Module)
-        self.__criterion = criterion
-
-    def set_lr_scheduler(
-        self, lr_scheduler_fn, lr_scheduler_step_policy: str = "epoch"
-    ):
-        if lr_scheduler_fn is not None:
-            self.__lr_scheduler_fn = lr_scheduler_fn
-
-        assert isinstance(
-            lr_scheduler_step_policy, str
-        ) and lr_scheduler_step_policy in ["epoch", "batch"]
-        self.__lr_scheduler_step_policy = lr_scheduler_step_policy
-
-    @staticmethod
-    def __load_optimizer_state(optimizer: torch.optim.Optimizer, state_dict: dict):
-        if "optimizer" in state_dict and "optimizer_state_dict" in state_dict:
-            if state_dict["optimizer"] == optimizer.__class__.__name__:
-                optimizer.load_state_dict(state_dict["optimizer_state_dict"])
-            else:
-                print(
-                    f"Skipping load optimizer state because {optimizer.__class__.__name__}"
-                    f" != {state_dict['optimizer']}"
-                )
-
-    @staticmethod
-    def __load_lr_schedular_state(
-        lr_scheduler: torch.optim.lr_scheduler._LRScheduler, state_dict: dict
-    ):
-        if "scheduler" in state_dict and "scheduler_state_dict" in state_dict:
-            if state_dict["scheduler"] == lr_scheduler.__class__.__name__:
-                lr_scheduler.load_state_dict(state_dict["scheduler_state_dict"])
-            else:
-                print(
-                    f"Skipping load lr scheduler state because {lr_scheduler.__class__.__name__}"
-                    f" != {state_dict['scheduler']}"
-                )
-
-    def save(
-        self,
-        tag: str,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        criterion: torch.nn.Module,
-        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
-        epoch: int = -1,
-        train_loss: float = float("inf"),
-        val_loss: float = float("inf"),
-    ):
-
-        state_dict = {
-            "model_state_dict": model.state_dict(),
-            "optimizer": optimizer.__class__.__name__,
-            "optimizer_state_dict": optimizer.state_dict(),
-            "criterion": criterion.__class__.__name__,
-            "epoch": epoch,
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-        }
-
-        if lr_scheduler is not None:
-            state_dict["scheduler"] = lr_scheduler.__class__.__name__
-            state_dict["scheduler_state_dict"] = lr_scheduler.state_dict()
-
-        filepath = f"{os.path.join(self.__model_dir, tag)}.pt"
-
-        torch.save(state_dict, filepath)
-        self.logger.log_model(tag, model, epoch, artifact_path=filepath)
-
-        return filepath
-
-    def set_predictor(self, predictor: deepml.tasks.Task):
-        assert isinstance(predictor, Task)
-        self.__predictor = predictor
-
-    @staticmethod
-    def __init_metrics(metrics: Dict[str, torch.nn.Module]) -> OrderedDict[str, float]:
-        metrics_dict = OrderedDict({"loss": 0.0})
-
-        if metrics is None:
-            return metrics_dict
-
-        for metric_name, _ in metrics.items():
-            if metric_name == "loss":
-                raise ValueError("Metric name 'loss' is reserved of criterion")
-            metrics_dict[metric_name] = 0.0
-
-        return metrics_dict
-
-    @staticmethod
-    def __update_metrics(
-        outputs: torch.Tensor,
-        targets: torch.Tensor,
-        metrics_instance_dict: Dict[str, torch.nn.Module],
-        target_metrics_dict: OrderedDict[str, float],
-    ):
-
-        if metrics_instance_dict is None:
-            return
-
-        for metric_name, metric_instance in metrics_instance_dict.items():
-            target_metrics_dict[metric_name] = metric_instance(outputs, targets)
-
-    @staticmethod
-    def __update_metrics_with_simple_moving_average(
-        source_metrics_dict: Dict[str, torch.nn.Module],
-        target_metrics_dict: OrderedDict[str, float],
-        step: int,
-    ):
-
-        for metric_name, metric_value in source_metrics_dict.items():
-            target_metrics_dict[metric_name] = target_metrics_dict[metric_name] + (
-                metric_value.mean().item() - target_metrics_dict[metric_name]
-            ) / float(step)
-
-    @staticmethod
-    def __write_metrics_to_logger(
-        metrics_dict: dict,
-        tag: str,
-        global_step: int,
-        logger: MLExperimentLogger,
-        history: dict,
-    ):
-        for name, value in metrics_dict.items():
-            logger.log_metric(f"{name}/{tag}", value, global_step)
-            history[f"{tag}_{name}"].append(value)
-
-    @staticmethod
-    def __write_lr(
-        optimizer, global_step: int, logger: MLExperimentLogger, history: dict
-    ):
-        # Write lr to tensor-board and history dict
-        if len(optimizer.param_groups) == 1:
-            param_group = optimizer.param_groups[0]
-            logger.log_metric("learning_rate", param_group["lr"], global_step)
-            history["learning_rate"].append(param_group["lr"])
-        else:
-            for index, param_group in enumerate(optimizer.param_groups):
-                logger.log_metric(
-                    f"learning_rate/param_group_{index}", param_group["lr"], global_step
-                )
-                history[f"learning_rate/param_group_{index}"].append(param_group["lr"])
+        os.makedirs(self._model_dir, exist_ok=True)
 
     def fit(
         self,
@@ -324,15 +167,17 @@ class FabricTrainer:
         # after training is complete, load model weights back
         if self.fabric.is_global_zero:
             latest_checkpoint_filepath = (
-                f"{os.path.join(self.__model_dir, 'latest_model')}.pt"
+                f"{os.path.join(self._model_dir, 'latest_model')}.pt"
             )
-            state_dict = torch.load(latest_checkpoint_filepath, map_location="cpu")
-            self.__model.load_state_dict(state_dict["model_state_dict"])
-            self.__optimizer.load_state_dict(state_dict["optimizer_state_dict"])
+            state_dict = torch.load(
+                latest_checkpoint_filepath, map_location=self.fabric.device
+            )
+            self._model.load_state_dict(state_dict["model_state_dict"])
+            self._optimizer.load_state_dict(state_dict["optimizer_state_dict"])
             self.epochs_completed = state_dict.get("epoch", 0)
             self.best_val_loss = state_dict.get("val_loss", float("inf"))
 
-        # updater history list
+        # update history list
         for key, value in history.items():
             self.history[key].extend(value)
 
@@ -424,11 +269,11 @@ class FabricTrainer:
         if resume_from_checkpoint is not None and os.path.exists(
             resume_from_checkpoint
         ):
-            state_dict = torch.load(resume_from_checkpoint, map_location="cpu")
-            self.__model.load_state_dict(state_dict["model_state_dict"])
+            state_dict = torch.load(resume_from_checkpoint, map_location=fabric.device)
+            self._model.load_state_dict(state_dict["model_state_dict"])
 
             if load_optimizer_state:
-                FabricTrainer.__load_optimizer_state(self.__optimizer, state_dict)
+                FabricTrainer.load_optimizer_state(self._optimizer, state_dict)
 
             self.epochs_completed = state_dict.get("epoch", 0)
             self.best_val_loss = state_dict.get("val_loss", float("inf"))
@@ -438,11 +283,11 @@ class FabricTrainer:
                     f"Resuming training from epoch {self.epochs_completed} with best validation loss {self.best_val_loss}"
                 )
 
-        model, optimizer = fabric.setup(self.__model, self.__optimizer)
+        model, optimizer = fabric.setup(self._model, self._optimizer)
         train_loader, val_loader = fabric.setup_dataloaders(train_loader, val_loader)
         lr_scheduler = (
-            self.__lr_scheduler_fn(optimizer)
-            if self.__lr_scheduler_fn is not None
+            self._lr_scheduler_fn(optimizer)
+            if self._lr_scheduler_fn is not None
             else None
         )
 
@@ -451,21 +296,21 @@ class FabricTrainer:
             and load_scheduler_state
             and "scheduler_state_dict" in state_dict
         ):
-            FabricTrainer.__load_lr_schedular_state(lr_scheduler, state_dict)
+            FabricTrainer.load_lr_schedular_state(lr_scheduler, state_dict)
 
         if fabric.is_global_zero:
             self.logger = (
-                logger if logger is not None else TensorboardLogger(self.__model_dir)
+                logger if logger is not None else TensorboardLogger(self._model_dir)
             )
             self.logger.log_params(
-                task=self.__predictor,
+                task=self._task,
                 loader=val_loader,
                 epochs=epochs,
-                criterion=self.__criterion,
+                criterion=self._criterion,
                 lr_scheduler=lr_scheduler,
             )
 
-        criterion = self.__criterion
+        criterion = self._criterion
         epochs_completed = self.epochs_completed
         best_val_loss = self.best_val_loss
         epochs = epochs_completed + epochs
@@ -480,7 +325,7 @@ class FabricTrainer:
 
             if fabric.is_global_zero:
                 print("Epoch {}/{}:".format(epoch + 1, epochs))
-                FabricTrainer.__write_lr(optimizer, epoch + 1, self.logger, history)
+                FabricTrainer.write_lr(optimizer, epoch + 1, self.logger, history)
 
             # training
             train_global_metrics_dict = self.__train(
@@ -490,7 +335,7 @@ class FabricTrainer:
                 criterion,
                 train_loader,
                 step_lr_scheduler=(
-                    lr_scheduler if self.__lr_scheduler_step_policy == "step" else None
+                    lr_scheduler if self._lr_scheduler_step_policy == "step" else None
                 ),
                 metrics=metrics,
                 non_blocking=non_blocking,
@@ -514,7 +359,7 @@ class FabricTrainer:
             if fabric.is_global_zero:
 
                 epochs_completed = epochs_completed + 1
-                self.__log_metrics(
+                self.log_metrics(
                     val_loader,
                     train_global_metrics_dict,
                     val_global_metrics_dict,
@@ -564,7 +409,7 @@ class FabricTrainer:
             fabric.barrier()
 
             # LR Scheduler step after each epoch
-            if lr_scheduler is not None and self.__lr_scheduler_step_policy == "epoch":
+            if lr_scheduler is not None and self._lr_scheduler_step_policy == "epoch":
                 if val_loader and isinstance(
                     lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
                 ):
@@ -601,12 +446,51 @@ class FabricTrainer:
         gradient_clip_value: Optional[float] = None,
         gradient_clip_max_norm: Optional[float] = None,
     ) -> OrderedDict[str, float]:
+        """
+        Run a single training epoch.
+
+        Parameters
+        ----------
+        fabric : Fabric
+            lightning_fabric Fabric instance used for device, sync and distributed utilities.
+        model : torch.nn.Module
+            Model to train; the function will set it to train() mode.
+        optimizer : torch.optim.Optimizer
+            Optimizer used to update model parameters.
+        criterion : torch.nn.Module
+            Loss function accepting (outputs, targets) and returning a scalar tensor.
+        train_loader : torch.utils.data.DataLoader
+            Iterable yielding batches in the form (inputs, targets).
+        step_lr_scheduler : Optional[torch.optim.lr_scheduler._LRScheduler], optional
+            Learning rate scheduler that should be stepped after each optimizer.step() (for \"step\" policy).
+        metrics : Dict[str, torch.nn.Module], optional
+            Mapping of metric name to metric module. Each metric should accept (outputs, targets).
+        non_blocking : bool, optional
+            If True, use non_blocking tensor transfers to device when available.
+        gradient_accumulation_steps : int, optional
+            Number of micro-batches to accumulate gradients over before calling optimizer.step().
+        gradient_clip_value : Optional[float], optional
+            If set, gradients will be clipped element-wise to the range [-gradient_clip_value, gradient_clip_value].
+        gradient_clip_max_norm : Optional[float], optional
+            If set, gradients will be clipped by global norm to this value.
+
+        Returns
+        -------
+        OrderedDict[str, float]
+            Aggregated metrics (simple moving average) across all processes. Only meaningful on the global zero process.
+
+        Notes
+        -----
+        - Uses Fabric's `no_backward_sync` to avoid gradient sync during accumulation.
+        - Aggregates per-batch metrics across processes using `fabric.all_gather` and computes a simple moving average.
+        - Progress bars and returned metrics are managed only on the global zero process (`fabric.is_global_zero`).
+        """
 
         # Training mode
         model.train()
 
         # init all metrics with zeros
-        local_batch_metrics_dict = FabricTrainer.__init_metrics(metrics)
+        local_batch_metrics_dict = FabricTrainer.init_metrics(metrics)
 
         training_progress_bar = None
         step = None
@@ -616,7 +500,7 @@ class FabricTrainer:
 
             # Global metrics dict for tracking metrics from all processes,
             # separate history is used to track metrics across multiple calls to fit method
-            global_metrics_dict = FabricTrainer.__init_metrics(metrics)
+            global_metrics_dict = FabricTrainer.init_metrics(metrics)
             training_progress_bar = tqdm(
                 total=len(train_loader),
                 desc="{:12s}".format("Training"),
@@ -634,7 +518,7 @@ class FabricTrainer:
 
             # If we are accumulating gradients, we do not need to step the optimizer
             with fabric.no_backward_sync(model, enabled=is_accumulating):
-                outputs, x, y = self.__predictor.train_step(
+                outputs, x, y = self._task.train_step(
                     x, y, model=model, device=fabric.device, non_blocking=non_blocking
                 )
 
@@ -674,7 +558,7 @@ class FabricTrainer:
                 optimizer.zero_grad(set_to_none=True)
 
                 local_batch_metrics_dict["loss"] = loss
-                FabricTrainer.__update_metrics(
+                FabricTrainer.update_metrics(
                     outputs, y, metrics, local_batch_metrics_dict
                 )
 
@@ -706,7 +590,7 @@ class FabricTrainer:
                         for i, name in enumerate(local_batch_metrics_dict.keys())
                     }
 
-                    FabricTrainer.__update_metrics_with_simple_moving_average(
+                    FabricTrainer.update_metrics_with_simple_moving_average(
                         all_batch_metrics, global_metrics_dict, step
                     )
                     training_progress_bar.set_postfix(
@@ -732,13 +616,13 @@ class FabricTrainer:
     ):
 
         model.eval()
-        local_batch_metrics_dict = FabricTrainer.__init_metrics(metrics)
+        local_batch_metrics_dict = FabricTrainer.init_metrics(metrics)
         validation_progress_bar = None
-        global_metrics_dict = FabricTrainer.__init_metrics(metrics)
+        global_metrics_dict = FabricTrainer.init_metrics(metrics)
         step = 0
 
         if fabric.is_global_zero:
-            global_metrics_dict = FabricTrainer.__init_metrics(metrics)
+            global_metrics_dict = FabricTrainer.init_metrics(metrics)
             validation_progress_bar = tqdm(
                 total=len(loader),
                 desc="{:12s}".format("Validation"),
@@ -750,7 +634,7 @@ class FabricTrainer:
 
             for batch_index, (x, y) in enumerate(loader):
 
-                outputs, x, y = self.__predictor.eval_step(
+                outputs, x, y = self._task.eval_step(
                     x, y, model=model, device=fabric.device, non_blocking=non_blocking
                 )
 
@@ -767,7 +651,7 @@ class FabricTrainer:
                 loss = criterion(outputs, y)
 
                 local_batch_metrics_dict["loss"] = loss
-                FabricTrainer.__update_metrics(
+                FabricTrainer.update_metrics(
                     outputs, y, metrics, local_batch_metrics_dict
                 )
 
@@ -799,7 +683,7 @@ class FabricTrainer:
                         for i, name in enumerate(local_batch_metrics_dict.keys())
                     }
 
-                    FabricTrainer.__update_metrics_with_simple_moving_average(
+                    FabricTrainer.update_metrics_with_simple_moving_average(
                         all_batch_metrics, global_metrics_dict, step
                     )
                     validation_progress_bar.set_postfix(
@@ -814,53 +698,12 @@ class FabricTrainer:
 
         return global_metrics_dict
 
-    def __log_metrics(
-        self,
-        val_loader: torch.utils.data.DataLoader,
-        train_metrics: dict,
-        val_metrics: dict,
-        metrics_history: dict,
-        epochs_completed: int,
-        logger_img_size: Union[int, Tuple[int, int]],
-        image_inverse_transform: Callable,
-    ):
-
-        train_loss = train_metrics["loss"]
-        val_loss = val_metrics["loss"]
-
-        FabricTrainer.__write_metrics_to_logger(
-            train_metrics,
-            "train",
-            epochs_completed,
-            self.logger,
-            metrics_history,
-        )
-
-        FabricTrainer.__write_metrics_to_logger(
-            val_metrics,
-            "val",
-            epochs_completed,
-            self.logger,
-            metrics_history,
-        )
-
-        # write random val images to tensorboard
-        if logger_img_size is not None:
-            self.__predictor.write_prediction_to_logger(
-                "val",
-                val_loader,
-                self.logger,
-                image_inverse_transform,
-                epochs_completed,
-                img_size=logger_img_size,
-            )
-
     def predict(self, loader):
-        predictions, targets = self.__predictor.predict(loader)
+        predictions, targets = self._task.predict(loader)
         return predictions, targets
 
     def predict_class(self, loader):
-        predicted_class, probability, targets = self.__predictor.predict_class(loader)
+        predicted_class, probability, targets = self._task.predict_class(loader)
         return predicted_class, probability, targets
 
     def show_predictions(
@@ -873,7 +716,7 @@ class FabricTrainer:
         target_known=True,
     ):
 
-        self.__predictor.show_predictions(
+        self._task.show_predictions(
             loader,
             image_inverse_transform=image_inverse_transform,
             samples=samples,
