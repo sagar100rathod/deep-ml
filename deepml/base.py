@@ -15,6 +15,7 @@ class BaseLearner(abc.ABC):
         task: Task,
         optimizer: torch.optim.Optimizer,
         criterion: torch.nn.Module,
+        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
         lr_scheduler_fn: Optional[
             Callable[[torch.optim.Optimizer], torch.optim.lr_scheduler._LRScheduler]
         ] = None,
@@ -22,6 +23,9 @@ class BaseLearner(abc.ABC):
     ):
 
         assert isinstance(task, Task)
+        assert (lr_scheduler is None) or (
+            lr_scheduler_fn is None
+        ), "Either lr_scheduler or lr_scheduler_fn can be provided, not both."
 
         self._task = task
         self._model = self._task.model
@@ -29,13 +33,14 @@ class BaseLearner(abc.ABC):
         self._model_file_name = self._task.model_file_name
         self._optimizer = None
         self._criterion = None
-        self._lr_scheduler_fn = None
+        self._lr_scheduler = lr_scheduler
+        self._lr_scheduler_fn = lr_scheduler_fn
         self._lr_scheduler_step_policy = None
         self.logger = None
 
         self.set_optimizer(optimizer)
         self.set_criterion(criterion)
-        self.set_lr_scheduler_fn(lr_scheduler_fn, lr_scheduler_step_policy)
+        self.set_lr_scheduler_policy(lr_scheduler_step_policy)
 
     def set_optimizer(self, optimizer: torch.optim.Optimizer):
         assert isinstance(optimizer, torch.optim.Optimizer)
@@ -45,12 +50,7 @@ class BaseLearner(abc.ABC):
         assert isinstance(criterion, torch.nn.Module)
         self._criterion = criterion
 
-    def set_lr_scheduler_fn(
-        self, lr_scheduler_fn, lr_scheduler_step_policy: str = "epoch"
-    ):
-        if lr_scheduler_fn is not None:
-            self._lr_scheduler_fn = lr_scheduler_fn
-
+    def set_lr_scheduler_policy(self, lr_scheduler_step_policy: str = "epoch"):
         assert isinstance(
             lr_scheduler_step_policy, str
         ) and lr_scheduler_step_policy in ["epoch", "step"]

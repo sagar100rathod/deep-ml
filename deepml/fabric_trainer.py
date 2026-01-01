@@ -18,14 +18,14 @@ class FabricTrainer(BaseLearner):
         task: Task,
         optimizer: torch.optim.Optimizer,
         criterion: torch.nn.Module,
-        accelerator: Union[str, int] = "auto",
-        strategy: Union[str, int] = "auto",
-        devices: Union[str, int] = "auto",
-        precision: str = "32-true",
         lr_scheduler_fn: Optional[
             Callable[[torch.optim.Optimizer], torch.optim.lr_scheduler._LRScheduler]
         ] = None,
         lr_scheduler_step_policy: str = "epoch",
+        accelerator: Union[str, int] = "auto",
+        strategy: Union[str, int] = "auto",
+        devices: Union[str, int] = "auto",
+        precision: str = "32-true",
         num_nodes: int = 1,
         fabric_plugins: Optional = None,
     ):
@@ -35,6 +35,13 @@ class FabricTrainer(BaseLearner):
         :param task: Object of subclass deepml.tasks.Task
         :param optimizer: The optimizer from torch.optim
         :param criterion: The loss function
+        :param lr_scheduler_fn: Should be factory function returning desired learning rate scheduler, and accepting optimizer as an argument.
+                                For example, lr_scheduler_fn = lambda optimizer: StepLR(optimizer, step_size=5, gamma=0.5)
+        :param lr_scheduler_step_policy: It is the time when lr_scheduler.step() would be called.
+                                         Possible choices are ["epoch", "step"]
+                                         Default is "epoch" policy.
+                                         Use "step" policy if you want lr_scheduler.step() to be
+                                         called after each gradient step.
         :param accelerator: The hardware accelerator to use for training.
                          Possible choices - "cpu"``, ``"cuda"``, ``"mps"``, ``"gpu"``, ``"tpu"``, or ``"auto"``.
         :param strategy: Strategy for how to run across multiple devices.
@@ -43,13 +50,6 @@ class FabricTrainer(BaseLearner):
         :param precision: The precision to use for training.
                         Possible choices are - "16-mixed", "32-true", "64-true", "bf16-mixed", "bf16-true" or "auto".
 
-        :param lr_scheduler_fn: Should be factory function returning desired learning rate scheduler, and accepting optimizer as an argument.
-                                For example, lr_scheduler_fn = lambda optimizer: StepLR(optimizer, step_size=5, gamma=0.5)
-        :param lr_scheduler_step_policy: It is the time when lr_scheduler.step() would be called.
-                                         Possible choices are ["epoch", "step"]
-                                         Default is "epoch" policy.
-                                         Use "step" policy if you want lr_scheduler.step() to be
-                                         called after each gradient step.
         :param num_nodes: The number of nodes to use for distributed training.
         :param fabric_plugins: Optional plugins to pass to Fabric for custom behaviors.
                                Like DeepSpeedPlugin for DeepSpeed integration.
@@ -59,7 +59,12 @@ class FabricTrainer(BaseLearner):
                                plugin = BitsandbytesPrecision(mode="int8")
         """
         super().__init__(
-            task, optimizer, criterion, lr_scheduler_fn, lr_scheduler_step_policy
+            task=task,
+            optimizer=optimizer,
+            criterion=criterion,
+            lr_scheduler=None,
+            lr_scheduler_fn=lr_scheduler_fn,
+            lr_scheduler_step_policy=lr_scheduler_step_policy,
         )
 
         self.fabric = Fabric(
@@ -374,7 +379,7 @@ class FabricTrainer(BaseLearner):
 
                 message = f"\nTrain Loss: {train_loss:.4f} Val Loss: {val_loss:.4f}"
 
-                # Save best validation model
+                # Save the best validation model
                 if val_loss < best_val_loss:
                     message = message + " [Saving best validation model]"
                     best_val_loss = val_loss
@@ -515,6 +520,7 @@ class FabricTrainer(BaseLearner):
         for batch_index, (x, y) in enumerate(train_loader):
 
             is_accumulating = batch_index % gradient_accumulation_steps != 0
+            is_last_batch = (batch_index + 1) == len(train_loader)
 
             # If we are accumulating gradients, we do not need to step the optimizer
             with fabric.no_backward_sync(model, enabled=is_accumulating):
@@ -530,14 +536,55 @@ class FabricTrainer(BaseLearner):
                     y = y.view_as(outputs)
 
                 loss = criterion(outputs, y)
-                fabric.backward(loss)
+                fabric.backward(loss / gradient_accumulation_steps)  # normalize loss
 
-            # update progress bar iteration step
+            # we gather log loss and metrics at each batch, so no need to sum up running loss during accumulation
+            local_batch_metrics_dict["loss"] = loss
+            FabricTrainer.update_metrics(outputs, y, metrics, local_batch_metrics_dict)
+
+            # collect metric values from all processes using tensor type, avoid dict type
+            values = torch.tensor(
+                list(local_batch_metrics_dict.values()),
+                device=fabric.device,
+                dtype=torch.float32,
+            )
+
+            # all_gather is used to aggregate the value across processes
+            all_batch_metrics = fabric.all_gather(
+                values
+            )  # returns tensor of shape (world_size, num_metrics)
+
+            # update progress bar for each batch
+            # Aggregate metrics across all processes
             if fabric.is_global_zero:
                 training_progress_bar.update(1)
 
+                step = step + 1
+
+                all_batch_metrics = all_batch_metrics.view(
+                    fabric.world_size, len(local_batch_metrics_dict)
+                )
+
+                # Convert all_batch_metrics to dict with metric names
+                all_batch_metrics = {
+                    name: all_batch_metrics[
+                        :, i
+                    ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                    for i, name in enumerate(local_batch_metrics_dict.keys())
+                }
+
+                FabricTrainer.update_metrics_with_simple_moving_average(
+                    all_batch_metrics, global_metrics_dict, step
+                )
+                training_progress_bar.set_postfix(
+                    {
+                        name: f"{round(value, 4)}"
+                        for name, value in global_metrics_dict.items()
+                    }
+                )
+
             # If we are not accumulating gradients, we step the optimizer
-            if not is_accumulating:
+            if not is_accumulating or is_last_batch:
 
                 # Gradient clipping
                 if gradient_clip_value is not None:
@@ -557,54 +604,12 @@ class FabricTrainer(BaseLearner):
                 # Nullify the parameter gradients
                 optimizer.zero_grad(set_to_none=True)
 
-                local_batch_metrics_dict["loss"] = loss
-                FabricTrainer.update_metrics(
-                    outputs, y, metrics, local_batch_metrics_dict
-                )
-
-                # collect metric values from all processes using tensor type, avoid dict type
-                values = torch.tensor(
-                    list(local_batch_metrics_dict.values()),
-                    device=fabric.device,
-                    dtype=torch.float32,
-                )
-
-                # all_gather is used to aggregate the value across processes
-                all_batch_metrics = fabric.all_gather(
-                    values
-                )  # returns tensor of shape (world_size, num_metrics)
-
-                # Aggregate metrics across all processes
-                if fabric.is_global_zero:
-                    step = step + 1
-
-                    all_batch_metrics = all_batch_metrics.view(
-                        fabric.world_size, len(local_batch_metrics_dict)
-                    )
-
-                    # Convert all_batch_metrics to dict with metric names
-                    all_batch_metrics = {
-                        name: all_batch_metrics[
-                            :, i
-                        ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
-                        for i, name in enumerate(local_batch_metrics_dict.keys())
-                    }
-
-                    FabricTrainer.update_metrics_with_simple_moving_average(
-                        all_batch_metrics, global_metrics_dict, step
-                    )
-                    training_progress_bar.set_postfix(
-                        {
-                            name: f"{round(value, 4)}"
-                            for name, value in global_metrics_dict.items()
-                        }
-                    )
-
         if fabric.is_global_zero:
             training_progress_bar.close()
 
         return global_metrics_dict
 
+    @torch.no_grad()
     def __validate(
         self,
         fabric: Fabric,
@@ -622,7 +627,6 @@ class FabricTrainer(BaseLearner):
         step = 0
 
         if fabric.is_global_zero:
-            global_metrics_dict = FabricTrainer.init_metrics(metrics)
             validation_progress_bar = tqdm(
                 total=len(loader),
                 desc="{:12s}".format("Validation"),
@@ -630,68 +634,64 @@ class FabricTrainer(BaseLearner):
                 leave=True,
             )
 
-        with torch.no_grad():
+        for batch_index, (x, y) in enumerate(loader):
 
-            for batch_index, (x, y) in enumerate(loader):
+            outputs, x, y = self._task.eval_step(
+                x, y, model=model, device=fabric.device, non_blocking=non_blocking
+            )
 
-                outputs, x, y = self._task.eval_step(
-                    x, y, model=model, device=fabric.device, non_blocking=non_blocking
+            if isinstance(y, torch.Tensor):
+                y = y.to(fabric.device)
+
+            if (
+                isinstance(outputs, torch.Tensor)
+                and outputs.ndim == 2
+                and outputs.shape[1] == 1
+            ):
+                y = y.view_as(outputs)
+
+            loss = criterion(outputs, y)
+
+            local_batch_metrics_dict["loss"] = loss
+            FabricTrainer.update_metrics(outputs, y, metrics, local_batch_metrics_dict)
+
+            # collect metric values from all processes using tensor type, avoid dict type
+            values = torch.tensor(
+                list(local_batch_metrics_dict.values()),
+                device=fabric.device,
+                dtype=torch.float32,
+            )
+
+            # all_gather is used to aggregate the value across processes
+            all_batch_metrics = fabric.all_gather(
+                values
+            )  # returns tensor of shape (world_size, num_metrics)
+
+            # Aggregate metrics across all processes
+            if fabric.is_global_zero:
+                validation_progress_bar.update(1)
+                step = step + 1
+
+                all_batch_metrics = all_batch_metrics.view(
+                    fabric.world_size, len(local_batch_metrics_dict)
                 )
 
-                if isinstance(y, torch.Tensor):
-                    y = y.to(fabric.device)
+                # Convert all_batch_metrics to dict with metric names
+                # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                all_batch_metrics = {
+                    name: all_batch_metrics[:, i]
+                    for i, name in enumerate(local_batch_metrics_dict.keys())
+                }
 
-                if (
-                    isinstance(outputs, torch.Tensor)
-                    and outputs.ndim == 2
-                    and outputs.shape[1] == 1
-                ):
-                    y = y.view_as(outputs)
-
-                loss = criterion(outputs, y)
-
-                local_batch_metrics_dict["loss"] = loss
-                FabricTrainer.update_metrics(
-                    outputs, y, metrics, local_batch_metrics_dict
+                FabricTrainer.update_metrics_with_simple_moving_average(
+                    all_batch_metrics, global_metrics_dict, step
                 )
-
-                # collect metric values from all processes using tensor type, avoid dict type
-                values = torch.tensor(
-                    list(local_batch_metrics_dict.values()),
-                    device=fabric.device,
-                    dtype=torch.float32,
-                )
-
-                # all_gather is used to aggregate the value across processes
-                all_batch_metrics = fabric.all_gather(
-                    values
-                )  # returns tensor of shape (world_size, num_metrics)
-
-                # Aggregate metrics across all processes
-                if fabric.is_global_zero:
-                    validation_progress_bar.update(1)
-                    step = step + 1
-
-                    all_batch_metrics = all_batch_metrics.view(
-                        fabric.world_size, len(local_batch_metrics_dict)
-                    )
-
-                    # Convert all_batch_metrics to dict with metric names
-                    # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
-                    all_batch_metrics = {
-                        name: all_batch_metrics[:, i]
-                        for i, name in enumerate(local_batch_metrics_dict.keys())
+                validation_progress_bar.set_postfix(
+                    {
+                        name: f"{round(value, 4)}"
+                        for name, value in global_metrics_dict.items()
                     }
-
-                    FabricTrainer.update_metrics_with_simple_moving_average(
-                        all_batch_metrics, global_metrics_dict, step
-                    )
-                    validation_progress_bar.set_postfix(
-                        {
-                            name: f"{round(value, 4)}"
-                            for name, value in global_metrics_dict.items()
-                        }
-                    )
+                )
 
         if fabric.is_global_zero:
             validation_progress_bar.close()
