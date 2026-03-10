@@ -29,6 +29,11 @@ def setup_one_cycle_lr_scheduler_with_warmup(
     """
 
     total_steps = num_epochs * steps_per_epoch
+
+    assert (
+        warmup_steps < total_steps
+    ), f"Warmup steps: {warmup_steps} should be less than total training steps: {total_steps}"
+
     warmup_ratio = warmup_steps / total_steps
 
     lr_scheduler = OneCycleLR(
