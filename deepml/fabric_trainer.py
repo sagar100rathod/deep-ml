@@ -12,6 +12,16 @@ from deepml.tracking import MLExperimentLogger, TensorboardLogger
 
 
 class FabricTrainer(BaseLearner):
+    """Training class for learning model weights using Lightning Fabric.
+
+    This trainer leverages Lightning Fabric for distributed training, mixed precision,
+    and hardware acceleration while maintaining a simple PyTorch-like interface.
+
+    It supports features like gradient accumulation, gradient clipping, learning rate
+    scheduling, checkpointing, and logging with experiment tracking integration. The trainer
+    is designed to be flexible and extensible for various types of learning tasks defined by the Task abstraction.
+
+    """
 
     def __init__(
         self,
@@ -29,34 +39,43 @@ class FabricTrainer(BaseLearner):
         num_nodes: int = 1,
         fabric_plugins: Optional = None,
     ):
-        """
-        Training class for learning a model weights using particular task.
+        """Initializes the FabricTrainer.
 
-        :param task: Object of subclass deepml.tasks.Task
-        :param optimizer: The optimizer from torch.optim
-        :param criterion: The loss function
-        :param lr_scheduler_fn: Should be factory function returning desired learning rate scheduler, and accepting optimizer as an argument.
-                                For example, lr_scheduler_fn = lambda optimizer: StepLR(optimizer, step_size=5, gamma=0.5)
-        :param lr_scheduler_step_policy: It is the time when lr_scheduler.step() would be called.
-                                         Possible choices are ["epoch", "step"]
-                                         Default is "epoch" policy.
-                                         Use "step" policy if you want lr_scheduler.step() to be
-                                         called after each gradient step.
-        :param accelerator: The hardware accelerator to use for training.
-                         Possible choices - "cpu"``, ``"cuda"``, ``"mps"``, ``"gpu"``, ``"tpu"``, or ``"auto"``.
-        :param strategy: Strategy for how to run across multiple devices.
-                        Possible choices - "dp", "ddp", "fsdp", "deepspeed", "ddp_spawn" or "auto".
-        :param devices: The number of devices to use for training.
-        :param precision: The precision to use for training.
-                        Possible choices are - "16-mixed", "32-true", "64-true", "bf16-mixed", "bf16-true" or "auto".
+        Args:
+            task: Task object defining the learning task (e.g., classification, segmentation).
+            optimizer: PyTorch optimizer instance for parameter updates.
+            criterion: Loss function module.
+            lr_scheduler_fn: Factory function that creates a learning rate scheduler.
+                Should accept an optimizer and return a scheduler instance.
+                Example: ``lambda optimizer: StepLR(optimizer, step_size=5, gamma=0.5)``.
+                Defaults to None.
+            lr_scheduler_step_policy: When to call scheduler.step(). Valid options are
+                ``"epoch"`` (step after each epoch) or ``"step"`` (step after each
+                gradient update). Defaults to ``"epoch"``.
+            accelerator: Hardware accelerator to use. Options: ``"cpu"``, ``"cuda"``,
+                ``"mps"``, ``"gpu"``, ``"tpu"``, or ``"auto"``. Defaults to ``"auto"``.
+            strategy: Distributed training strategy. Options: ``"dp"``, ``"ddp"``,
+                ``"fsdp"``, ``"deepspeed"``, ``"ddp_spawn"``, or ``"auto"``.
+                Defaults to ``"auto"``.
+            devices: Number or list of devices to use. Can be int, str, or ``"auto"``.
+                Defaults to ``"auto"``.
+            precision: Training precision. Options: ``"16-mixed"``, ``"32-true"``,
+                ``"64-true"``, ``"bf16-mixed"``, ``"bf16-true"``, or ``"auto"``.
+                Defaults to ``"32-true"``.
+            num_nodes: Number of nodes for multi-node distributed training.
+                Defaults to 1.
+            fabric_plugins: Optional Fabric plugins for custom behaviors (e.g.,
+                DeepSpeedPlugin, BitsandbytesPrecision). Defaults to None.
 
-        :param num_nodes: The number of nodes to use for distributed training.
-        :param fabric_plugins: Optional plugins to pass to Fabric for custom behaviors.
-                               Like DeepSpeedPlugin for DeepSpeed integration.
-                               BitsandbytesPlugin for memory efficient training with 8-bit optimizers etc.
-                               Example:
-                               from lightning_fabric.plugins import BitsandbytesPrecision
-                               plugin = BitsandbytesPrecision(mode="int8")
+        Example:
+            >>> from lightning_fabric.plugins import BitsandbytesPrecision
+            >>> plugin = BitsandbytesPrecision(mode="int8")
+            >>> trainer = FabricTrainer(
+            ...     task=task,
+            ...     optimizer=optimizer,
+            ...     criterion=criterion,
+            ...     fabric_plugins=plugin
+            ... )
         """
         super().__init__(
             task=task,
@@ -102,52 +121,44 @@ class FabricTrainer(BaseLearner):
         image_inverse_transform: Callable = None,
         logger_img_size: Union[int, Tuple[int, int]] = None,
     ):
-        """
-        Trains the model on specified train loader for specified number of epochs.
+        """Trains the model for the specified number of epochs.
 
-        Parameters
-        ----------
-        :param train_loader: The torch.utils.data.DataLoader for model to train on.
+        This method launches distributed training using Lightning Fabric and handles
+        checkpointing, logging, and training history management.
 
-        :param val_loader: The torch.utils.data.DataLoader for model to validate on.
-                           Default is None.
+        Args:
+            train_loader: DataLoader for training data.
+            val_loader: DataLoader for validation data. Defaults to None.
+            epochs: Total number of epochs to train. Defaults to 10.
+            save_model_after_every_epoch: Frequency (in epochs) to save model checkpoints.
+                Defaults to 5.
+            metrics: Dictionary mapping metric names to metric instances. Each metric
+                must be a torch.nn.Module with a forward() method. Defaults to None.
+            gradient_accumulation_steps: Number of steps to accumulate gradients before
+                performing an optimizer step. Simulates larger batch sizes. Defaults to 1.
+            gradient_clip_value: Maximum absolute value for gradient clipping. Gradients
+                will be clipped to [-gradient_clip_value, gradient_clip_value].
+                Defaults to None (no clipping).
+            gradient_clip_max_norm: Maximum L2 norm for gradient clipping. Defaults to
+                None (no clipping).
+            resume_from_checkpoint: Path to checkpoint file to resume training from.
+                Defaults to None.
+            load_optimizer_state: Whether to load optimizer state from checkpoint.
+                Defaults to False.
+            load_scheduler_state: Whether to load learning rate scheduler state from
+                checkpoint. Defaults to False.
+            logger: Experiment logger for tracking metrics and artifacts. If None, uses
+                TensorboardLogger. Defaults to None.
+            non_blocking: Whether to use asynchronous CUDA tensor transfers.
+                Defaults to True.
+            image_inverse_transform: Transformation to reverse image normalization for
+                visualization in TensorBoard. Defaults to None.
+            logger_img_size: Image size (int or tuple) for TensorBoard logging.
+                Defaults to None.
 
-        :param epochs: int The number of epochs to train. Default is 10
-
-        :param save_model_after_every_epoch: To save the model after every number of completed epochs
-                                            Default is 5.
-
-        :param metrics: dictionary of metrics 'metric_name': metric instance to monitor.
-                        Metric name is used as label for logging metric value to console and tensorboard.
-                        Metric instance must be a subclass of torch.nn.Module, which implements forward function and
-                        returns calculated value.
-
-        :param gradient_accumulation_steps : Number of steps to accumulate gradients before updating the model parameters.
-                                    It is a way to simulate a larger batch size without increasing the memory footprint.
-
-        :param gradient_clip_value: The maximum value for gradient clipping. Default is None which means no clipping.
-                                    The gradients will be clipped to the range [-gradient_clip_value, gradient_clip_value]
-
-        :param gradient_clip_max_norm:  Gradient clipping is done using the norm of the gradients.
-                                        Default is None which means no clipping.
-
-        :param resume_from_checkpoint: Full Path to the checkpoint file to resume training from.
-
-        :param load_optimizer_state: If True, it will load optimizer state from checkpoint.
-
-        :param load_scheduler_state: If True, it will load learning rate scheduler state from checkpoint.
-
-        :param logger: MLExperimentLogger instance to log metrics and model artifacts.
-
-        :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
-
-        :param image_inverse_transform: It denotes reverse transformations of image normalization so that images
-                                        can be displayed on tensor board.
-                                        Default is deepml.transforms.ImageNetInverseTransform() which is
-                                        an inverse of ImageNet normalization.
-
-        :param logger_img_size:  image size to use for writing images to tensorboard
-
+        Note:
+            After training completes, the latest model checkpoint is automatically loaded
+            into the trainer's model and optimizer.
         """
 
         history = self.fabric.launch(
@@ -205,51 +216,55 @@ class FabricTrainer(BaseLearner):
         image_inverse_transform: Callable = None,
         logger_img_size: Union[int, Tuple[int, int]] = None,
     ) -> Dict[str, list]:
-        """
-        Trains the model on specified train loader for specified number of epochs using lightning_fabric.
+        """Internal implementation of training loop using Lightning Fabric.
 
-        Parameters
-        ----------
-        :param train_loader: The torch.utils.data.DataLoader for model to train on.
+        This method is launched by Fabric and runs the actual training loop across
+        distributed processes. It handles model setup, checkpointing, validation,
+        and metric tracking.
 
-        :param val_loader: The torch.utils.data.DataLoader for model to validate on.
-                           Default is None.
+        Args:
+            fabric: Lightning Fabric instance for distributed training utilities.
+            train_loader: DataLoader for training data.
+            val_loader: DataLoader for validation data. Defaults to None.
+            epochs: Total number of epochs to train. Defaults to 10.
+            save_model_after_every_epoch: Frequency (in epochs) to save model checkpoints.
+                Defaults to 5.
+            metrics: Dictionary mapping metric names to metric instances. Each metric
+                must be a torch.nn.Module with a forward() method. Defaults to None.
+            gradient_accumulation_steps: Number of steps to accumulate gradients before
+                performing an optimizer step. Must be greater than 0. Defaults to 1.
+            gradient_clip_value: Maximum absolute value for gradient clipping. Gradients
+                will be clipped to [-gradient_clip_value, gradient_clip_value].
+                Defaults to None (no clipping).
+            gradient_clip_max_norm: Maximum L2 norm for gradient clipping. Defaults to
+                None (no clipping).
+            resume_from_checkpoint: Path to checkpoint file to resume training from.
+                Defaults to None.
+            load_optimizer_state: Whether to load optimizer state from checkpoint.
+                Defaults to False.
+            load_scheduler_state: Whether to load learning rate scheduler state from
+                checkpoint. Defaults to False.
+            logger: Experiment logger for tracking metrics and artifacts. Defaults to None.
+            non_blocking: Whether to use asynchronous CUDA tensor transfers.
+                Defaults to True.
+            image_inverse_transform: Transformation to reverse image normalization for
+                visualization in TensorBoard. Defaults to None.
+            logger_img_size: Image size (int or tuple) for TensorBoard logging.
+                Defaults to None.
 
-        :param epochs: int The number of epochs to train. Default is 10
+        Returns:
+            Dictionary containing training history with metric names as keys and
+            lists of values as entries.
 
-        :param save_model_after_every_epoch: To save the model after every number of completed epochs
-                                            Default is 5.
+        Raises:
+            AssertionError: If gradient_accumulation_steps is not greater than 0.
+            ValueError: If both gradient_clip_value and gradient_clip_max_norm are
+                provided (only one can be used).
+            TypeError: If any metric is not a torch.nn.Module with a forward() method.
 
-
-        :param metrics: dictionary of metrics 'metric_name': metric instance to monitor.
-                        Metric name is used as label for logging metric value to console and tensorboard.
-                        Metric instance must be subclass of torch.nn.Module, which implements forward function and
-                        returns calculated value.
-
-        :param gradient_accumulation_steps : Number of steps to accumulate gradients before updating the model parameters.
-                                    It is a way to simulate a larger batch size without increasing the memory footprint.
-
-        :param gradient_clip_value: The maximum value for gradient clipping. Default is None which means no clipping.
-                                       The gradients will be clipped to the range [-gradient_clip_value, gradient_clip_value]
-
-        :param gradient_clip_max_norm:  Gradient clipping is done using the norm of the gradients.
-                                        Default is None which means no clipping.
-
-        :param resume_from_checkpoint: Full Path to the checkpoint file to resume training from.
-
-        :param load_optimizer_state: If True, it will load optimizer state from checkpoint.
-
-        :param load_scheduler_state: If True, it will load learning rate scheduler state from checkpoint.
-
-        :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
-
-        :param logger_img_size:  image size to use for writing images to tensorboard
-
-        :param image_inverse_transform: It denotes reverse transformations of image normalization so that images
-                                        can be displayed on tensor board.
-                                        Default is deepml.transforms.ImageNetInverseTransform() which is
-                                        an inverse of ImageNet normalization.
-
+        Note:
+            Only the global zero process saves checkpoints and manages the logger.
+            All processes synchronize at the end of each epoch using fabric.barrier().
         """
 
         assert (
@@ -451,44 +466,36 @@ class FabricTrainer(BaseLearner):
         gradient_clip_value: Optional[float] = None,
         gradient_clip_max_norm: Optional[float] = None,
     ) -> OrderedDict[str, float]:
-        """
-        Run a single training epoch.
+        """Runs a single training epoch with gradient accumulation and distributed training support.
 
-        Parameters
-        ----------
-        fabric : Fabric
-            lightning_fabric Fabric instance used for device, sync and distributed utilities.
-        model : torch.nn.Module
-            Model to train; the function will set it to train() mode.
-        optimizer : torch.optim.Optimizer
-            Optimizer used to update model parameters.
-        criterion : torch.nn.Module
-            Loss function accepting (outputs, targets) and returning a scalar tensor.
-        train_loader : torch.utils.data.DataLoader
-            Iterable yielding batches in the form (inputs, targets).
-        step_lr_scheduler : Optional[torch.optim.lr_scheduler._LRScheduler], optional
-            Learning rate scheduler that should be stepped after each optimizer.step() (for \"step\" policy).
-        metrics : Dict[str, torch.nn.Module], optional
-            Mapping of metric name to metric module. Each metric should accept (outputs, targets).
-        non_blocking : bool, optional
-            If True, use non_blocking tensor transfers to device when available.
-        gradient_accumulation_steps : int, optional
-            Number of micro-batches to accumulate gradients over before calling optimizer.step().
-        gradient_clip_value : Optional[float], optional
-            If set, gradients will be clipped element-wise to the range [-gradient_clip_value, gradient_clip_value].
-        gradient_clip_max_norm : Optional[float], optional
-            If set, gradients will be clipped by global norm to this value.
+        Args:
+            fabric: Lightning Fabric instance used for device, sync and distributed utilities.
+            model: Model to train; the function will set it to train() mode.
+            optimizer: Optimizer used to update model parameters.
+            criterion: Loss function accepting (outputs, targets) and returning a scalar tensor.
+            train_loader: Iterable yielding batches in the form (inputs, targets).
+            step_lr_scheduler: Learning rate scheduler that should be stepped after each
+                optimizer.step() (for "step" policy). Defaults to None.
+            metrics: Mapping of metric name to metric module. Each metric should accept
+                (outputs, targets). Defaults to None.
+            non_blocking: If True, use non_blocking tensor transfers to device when available.
+                Defaults to True.
+            gradient_accumulation_steps: Number of micro-batches to accumulate gradients over
+                before calling optimizer.step(). Defaults to 1.
+            gradient_clip_value: If set, gradients will be clipped element-wise to the range
+                [-gradient_clip_value, gradient_clip_value]. Defaults to None.
+            gradient_clip_max_norm: If set, gradients will be clipped by global norm to this
+                value. Defaults to None.
 
-        Returns
-        -------
-        OrderedDict[str, float]
-            Aggregated metrics (simple moving average) across all processes. Only meaningful on the global zero process.
+        Returns:
+            OrderedDict mapping metric names to aggregated values (simple moving average)
+            across all processes. Only meaningful on the global zero process.
 
-        Notes
-        -----
-        - Uses Fabric's `no_backward_sync` to avoid gradient sync during accumulation.
-        - Aggregates per-batch metrics across processes using `fabric.all_gather` and computes a simple moving average.
-        - Progress bars and returned metrics are managed only on the global zero process (`fabric.is_global_zero`).
+        Note:
+            - Uses Fabric's ``no_backward_sync`` to avoid gradient sync during accumulation.
+            - Aggregates per-batch metrics across processes using ``fabric.all_gather`` and
+              computes a simple moving average.
+            - Progress bars and returned metrics are managed only on the global zero process.
         """
 
         # Training mode
@@ -619,6 +626,27 @@ class FabricTrainer(BaseLearner):
         metrics: Dict[str, torch.nn.Module] = None,
         non_blocking: bool = True,
     ):
+        """Runs a single validation epoch across all processes.
+
+        Args:
+            fabric: Lightning Fabric instance used for device, sync and distributed utilities.
+            model: Model to evaluate; the function will set it to eval() mode.
+            loader: DataLoader yielding batches in the form (inputs, targets).
+            criterion: Loss function accepting (outputs, targets) and returning a scalar tensor.
+            metrics: Mapping of metric name to metric module. Each metric should accept
+                (outputs, targets). Defaults to None.
+            non_blocking: If True, use non_blocking tensor transfers to device when available.
+                Defaults to True.
+
+        Returns:
+            OrderedDict mapping metric names to aggregated values (simple moving average)
+            across all processes. Only meaningful on the global zero process.
+
+        Note:
+            - Gradients are disabled via ``@torch.no_grad()`` decorator.
+            - Aggregates per-batch metrics across processes using ``fabric.all_gather``.
+            - Progress bars and returned metrics are managed only on the global zero process.
+        """
 
         model.eval()
         local_batch_metrics_dict = FabricTrainer.init_metrics(metrics)
@@ -699,10 +727,30 @@ class FabricTrainer(BaseLearner):
         return global_metrics_dict
 
     def predict(self, loader):
+        """Generates predictions for the given data loader.
+
+        Args:
+            loader: DataLoader containing data for prediction.
+
+        Returns:
+            Tuple of (predictions, targets) where predictions are the model outputs
+            and targets are the ground truth labels.
+        """
         predictions, targets = self._task.predict(loader)
         return predictions, targets
 
     def predict_class(self, loader):
+        """Generates class predictions with probabilities for the given data loader.
+
+        Args:
+            loader: DataLoader containing data for prediction.
+
+        Returns:
+            Tuple of (predicted_class, probability, targets) where:
+                - predicted_class: Predicted class labels
+                - probability: Class probabilities or confidence scores
+                - targets: Ground truth labels
+        """
         predicted_class, probability, targets = self._task.predict_class(loader)
         return predicted_class, probability, targets
 
@@ -715,6 +763,18 @@ class FabricTrainer(BaseLearner):
         figsize=(10, 10),
         target_known=True,
     ):
+        """Visualizes model predictions on sample images.
+
+        Args:
+            loader: DataLoader containing data for visualization.
+            image_inverse_transform: Transformation to reverse image normalization for
+                display. Defaults to None.
+            samples: Number of samples to display. Defaults to 9.
+            cols: Number of columns in the visualization grid. Defaults to 3.
+            figsize: Figure size as (width, height) tuple. Defaults to (10, 10).
+            target_known: Whether ground truth targets are available for comparison.
+                Defaults to True.
+        """
 
         self._task.show_predictions(
             loader,

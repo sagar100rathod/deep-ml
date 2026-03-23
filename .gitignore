@@ -153,3 +153,9 @@ out/
 *mlflow.db
 *.pt
 events.out.tfevents.*
+
+
+# Sphinx docs
+docs/build/
+docs/source/_build/
+docs/source/.doctrees/
