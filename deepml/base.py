@@ -58,31 +58,18 @@ class BaseLearner(abc.ABC):
 
     @staticmethod
     def load_optimizer_state(optimizer: torch.optim.Optimizer, state_dict: dict):
-        if "optimizer" in state_dict and "optimizer_state_dict" in state_dict:
-            if state_dict["optimizer"] == optimizer.__class__.__name__:
-                optimizer.load_state_dict(state_dict["optimizer_state_dict"])
-            else:
-                print(
-                    f"Skipping load optimizer state because {optimizer.__class__.__name__}"
-                    f" != {state_dict['optimizer']}"
-                )
+        if "optimizer_state_dict" in state_dict:
+            optimizer.load_state_dict(state_dict["optimizer_state_dict"])
 
     @staticmethod
     def load_lr_schedular_state(
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler, state_dict: dict
     ):
-        if "scheduler" in state_dict and "scheduler_state_dict" in state_dict:
-            if state_dict["scheduler"] == lr_scheduler.__class__.__name__:
-                lr_scheduler.load_state_dict(state_dict["scheduler_state_dict"])
-            else:
-                print(
-                    f"Skipping load lr scheduler state because {lr_scheduler.__class__.__name__}"
-                    f" != {state_dict['scheduler']}"
-                )
+        if "scheduler_state_dict" in state_dict:
+            lr_scheduler.load_state_dict(state_dict["scheduler_state_dict"])
 
-    def save(
+    def create_state_dict(
         self,
-        tag: str,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         criterion: torch.nn.Module,
@@ -96,7 +83,7 @@ class BaseLearner(abc.ABC):
             "model_state_dict": model.state_dict(),
             "optimizer": optimizer.__class__.__name__,
             "optimizer_state_dict": optimizer.state_dict(),
-            "criterion": criterion.__class__.__name__,
+            "criterion": self._criterion.__class__.__name__,
             "epoch": epoch,
             "train_loss": train_loss,
             "val_loss": val_loss,
@@ -106,6 +93,29 @@ class BaseLearner(abc.ABC):
             state_dict["scheduler"] = lr_scheduler.__class__.__name__
             state_dict["scheduler_state_dict"] = lr_scheduler.state_dict()
 
+        return state_dict
+
+    def save(
+        self,
+        tag: str,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        criterion: torch.nn.Module,
+        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
+        epoch: int = -1,
+        train_loss: float = float("inf"),
+        val_loss: float = float("inf"),
+        **kwargs,
+    ):
+        state_dict = self.create_state_dict(
+            model=model,
+            optimizer=optimizer,
+            criterion=criterion,
+            lr_scheduler=lr_scheduler,
+            epoch=epoch,
+            train_loss=train_loss,
+            val_loss=val_loss,
+        )
         filepath = f"{os.path.join(self._model_dir, tag)}.pt"
 
         torch.save(state_dict, filepath)

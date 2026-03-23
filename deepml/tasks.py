@@ -7,7 +7,6 @@ import torch
 import torch.nn.functional as F
 import torchvision
 from PIL import Image
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from deepml.tracking import MLExperimentLogger

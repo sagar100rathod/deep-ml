@@ -1,11 +1,11 @@
 import csv
 import os
+import warnings
 from collections import OrderedDict, defaultdict
 from typing import Callable, Dict, Tuple, Union
 
 import numpy as np
 import torch
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 import deepml.tasks
@@ -15,6 +15,9 @@ from deepml.tracking import MLExperimentLogger, TensorboardLogger
 MAC_TORCH_2_2_2 = "2.2.2"  # Minimum torch version required for this module
 
 
+@warnings.deprecated(
+    "deepml.trainer.Learner is deprecated and will be removed in future releases. "
+)
 class Learner:
 
     def __init__(
@@ -215,7 +218,6 @@ class Learner:
                 ):
                     y = y.view_as(outputs)
 
-                y = self.__predictor.move_input_to_device(y)
                 loss = criterion(outputs, y)
 
                 self.__metrics_dict["loss"] = self.__metrics_dict["loss"] + (
@@ -421,8 +423,6 @@ class Learner:
             ) as bar:
 
                 for batch_index, (x, y) in enumerate(train_loader):
-
-                    y = self.__predictor.move_input_to_device(y)
 
                     if self.__use_amp:
                         # Enable autocast for mixed precision training

@@ -1,12 +1,15 @@
+import sys
 import time
 
 import torch
 import torch.nn.functional as F
 import torchvision
-from torch.utils.data.distributed import DistributedSampler
+
+sys.path.append("..")
 
 from deepml.accelerator_trainer import AcceleratorTrainer
 from deepml.metrics.classification import Accuracy
+from deepml.tasks import ImageClassification
 
 
 class MnistModel(torch.nn.Module):
@@ -26,28 +29,46 @@ class MnistModel(torch.nn.Module):
         return self.linear(x)
 
 
-torch.manual_seed(123)
-transform = torchvision.transforms.ToTensor()
+def main():
+    torch.manual_seed(123)
+    transform = torchvision.transforms.ToTensor()
 
-train_dataset = torchvision.datasets.MNIST(
-    "./data/", download=True, train=True, transform=transform
-)
-test_dataset = torchvision.datasets.MNIST(
-    "./data/", download=True, train=False, transform=transform
-)
+    train_dataset = torchvision.datasets.MNIST(
+        "./data/", download=True, train=True, transform=transform
+    )
+    test_dataset = torchvision.datasets.MNIST(
+        "./data/", download=True, train=False, transform=transform
+    )
 
-model = MnistModel()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
-criterion = torch.nn.CrossEntropyLoss()
-train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=16, num_workers=0, shuffle=True
-)
-val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, num_workers=0)
+    model = MnistModel()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+    criterion = torch.nn.CrossEntropyLoss()
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=16, num_workers=0, shuffle=True
+    )
+    val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, num_workers=0)
 
-start_time = time.time()
-trainer = AcceleratorTrainer(model, optimizer, criterion, {})
-trainer.fit(train_loader, val_loader, epochs=10, metrics={"acc": Accuracy()})
+    print("Train Samples:", len(train_dataset))
+    print("Val Samples:", len(test_dataset))
+    print("Batch Size:", train_loader.batch_size)
 
-end_time = time.time()
+    start_time = time.time()
+    classification_task = ImageClassification(
+        model, model_dir="./accelerator", classes=list(range(10))
+    )
+    trainer = AcceleratorTrainer(
+        classification_task,
+        optimizer,
+        criterion,
+        accelerator_config={"gradient_accumulation_steps": 2},
+    )
 
-print("Time taken (sec):", (end_time - start_time))
+    trainer.fit(train_loader, val_loader, epochs=10, metrics={"acc": Accuracy()})
+
+    end_time = time.time()
+
+    print("Time taken (sec):", (end_time - start_time))
+
+
+if __name__ == "__main__":
+    main()
