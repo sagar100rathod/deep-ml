@@ -150,3 +150,6 @@ scripts/data
 scripts/mlruns
 out/
 *.iml
+*mlflow.db
+*.pt
+events.out.tfevents.*
