@@ -30,7 +30,7 @@ packages = [{ include = "deepml" }]
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.2.0"
-black = {extras = ["jupyter"], version = "^25.1.0"}
+black = {extras = ["jupyter"], version = "^26.3.1"}
 isort = "^6.0.1"
 sphinx-autodoc-typehints = ">=1.23,<2.0"
 sphinx = ">=6,<8"
