@@ -22,18 +22,25 @@ def plot_images(
     figsize: Tuple[int, int] = (10, 10),
     fontsize: int = 14,
 ):
-    """
-    Display a grid of images with optional labels using matplotlib.
+    """Displays a grid of images with optional labels using matplotlib.
+
+    Creates a multi-panel figure showing images in a grid layout with optional
+    titles for each image.
 
     Args:
-        images (List[np.ndarray]): List of images as numpy arrays.
-        labels (List[str], optional): List of labels for each image. Defaults to None.
-        cols (int, optional): Number of columns in the grid. Defaults to 4.
-        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
-        fontsize (int, optional): Font size for image titles. Defaults to 14.
+        images: List of images as numpy arrays in HWC or HW format.
+        labels: List of labels/titles for each image. If provided, must have
+            the same length as images. Defaults to None.
+        cols: Number of columns in the grid. Rows are calculated automatically.
+            Defaults to 4.
+        figsize: Size of the matplotlib figure as (width, height) tuple.
+            Defaults to (10, 10).
+        fontsize: Font size for image titles. Defaults to 14.
 
-    Returns:
-        None
+    Note:
+        The function automatically calculates the number of rows needed based
+        on the number of images and columns. Axes ticks are hidden for cleaner
+        visualization.
     """
     plt.figure(figsize=figsize)
     rows = int(np.ceil(len(images) / cols))
@@ -49,19 +56,27 @@ def plot_images(
 def plot_images_with_title(
     image_generator, samples: int, cols=4, figsize=(10, 10), fontsize=14
 ):
-    """
-    Display a grid of images with colored titles using matplotlib.
+    """Displays a grid of images with colored titles using matplotlib.
+
+    Creates a multi-panel figure showing images in a grid layout with titles
+    that can have custom colors (useful for showing correct/incorrect predictions).
 
     Args:
-        image_generator: Generator yielding tuples (image: np.ndarray, title: str, title_color: Optional[str]).
-                        The title color is optional.
-        samples (int): Total number of images to display.
-        cols (int, optional): Number of columns in the grid. Defaults to 4.
-        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
-        fontsize (int, optional): Font size for image titles. Defaults to 14.
+        image_generator: Generator or iterable yielding tuples of
+            (image, title, title_color) where:
+                - image: numpy array in HWC or HW format
+                - title: String title for the image
+                - title_color: Optional color string (e.g., 'red', 'green', '#ff0000').
+                  If None, uses default matplotlib text color.
+        samples: Total number of images to display from the generator.
+        cols: Number of columns in the grid. Defaults to 4.
+        figsize: Size of the matplotlib figure as (width, height) tuple.
+            Defaults to (10, 10).
+        fontsize: Font size for image titles. Defaults to 14.
 
-    Returns:
-        None
+    Note:
+        This function is commonly used for showing model predictions where
+        title colors indicate correctness (green for correct, red for incorrect).
     """
 
     plt.figure(figsize=figsize)
@@ -89,22 +104,36 @@ def plot_images_with_bboxes(
     class_color_map: dict = None,
     cmap: str = "tab10",
 ):
-    """
-    Display a grid of images with bounding boxes and class labels using matplotlib.
+    """Displays a grid of images with bounding boxes and class labels.
+
+    Creates a multi-panel figure showing images with drawn bounding boxes and
+    labeled class names. Each bounding box is colored based on its class.
 
     Args:
-        image_generator: Generator yielding tuples (image: np.ndarray, title: str, bboxes: List[List[float]]).
-                         Each bbox is [id, xmin, ymin, width, height] where id may be an int index or label.
-        samples (int): Total number of images to display.
-        cols (int, optional): Number of columns in the grid. Defaults to 4.
-        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
-        fontsize (int, optional): Font size for image titles and bbox labels. Defaults to 14.
-        classes (List[str], optional): Optional list mapping class indices to class names.
-        class_color_map (dict, optional): Mapping from class id or class name to a color string (e.g. '#ff0000').
-        cmap (str, optional): Matplotlib colormap name used as fallback when class_color_map does not provide a color.
+        image_generator: Generator or iterable yielding tuples of
+            (image, title, bboxes) where:
+                - image: numpy array in HWC or HW format
+                - title: String title for the image
+                - bboxes: List of bounding boxes, each as [class_id, xmin, ymin, width, height]
+                  where class_id can be an integer index or string label.
+        samples: Total number of images to display from the generator.
+        cols: Number of columns in the grid. Defaults to 4.
+        figsize: Size of the matplotlib figure as (width, height) tuple.
+            Defaults to (10, 10).
+        fontsize: Font size for image titles and bbox labels. Defaults to 14.
+        classes: Optional list mapping class indices to class names. If provided
+            and class_id is an integer, uses classes[class_id] as the label.
+            Defaults to None.
+        class_color_map: Optional dictionary mapping class IDs or names to color
+            strings (e.g., '#ff0000', 'red'). If a class has no mapping, falls
+            back to the colormap. Defaults to None.
+        cmap: Matplotlib colormap name used as fallback for bbox colors when
+            class_color_map doesn't provide a color. Defaults to "tab10".
 
-    Returns:
-        None
+    Note:
+        Bounding boxes are drawn with red edges and labeled with a colored
+        background box containing the class name. Label text is white for
+        better visibility against the colored background.
     """
 
     plt.figure(figsize=figsize)
@@ -185,20 +214,29 @@ def show_images_from_loader(
     classes=None,
     title_color=None,
 ):
-    """
-    Display random samples of images from a DataLoader using matplotlib.
+    """Displays random samples of images from a DataLoader.
+
+    Randomly selects and displays images from a PyTorch DataLoader with their
+    corresponding labels as titles.
 
     Args:
-        loader: torch.utils.data.DataLoader returning image and label tensors.
-        image_inverse_transform (callable, optional): Function to inverse-transform images before display.
-        samples (int, optional): Number of images to display. Defaults to 9.
-        cols (int, optional): Number of columns in the grid. Defaults to 3.
-        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (5, 5).
-        classes (List[str], optional): List of class names for labels.
-        title_color (str, optional): Color for image titles.
+        loader: PyTorch DataLoader returning batches of (image, label) tensors.
+        image_inverse_transform: Optional callable to reverse image normalization
+            or transformations before display (e.g., denormalization). Defaults to None.
+        samples: Number of images to display. Defaults to 9.
+        cols: Number of columns in the grid. Defaults to 3.
+        figsize: Size of the matplotlib figure as (width, height) tuple.
+            Defaults to (5, 5).
+        classes: Optional list of class names for converting label indices to
+            text. If None and loader.dataset has a 'classes' attribute, uses that.
+            Defaults to None.
+        title_color: Optional color string for all image titles (e.g., 'blue').
+            Defaults to None.
 
-    Returns:
-        None
+    Note:
+        Images are randomly sampled from the DataLoader. If the DataLoader's
+        dataset has a 'classes' attribute, it will be used automatically for
+        label names unless overridden by the classes parameter.
     """
     x, y = get_random_samples_batch_from_loader(loader, samples=samples)
     x = transform_input(x, image_inverse_transform)
@@ -224,20 +262,29 @@ def show_images_from_dataset(
     classes=None,
     title_color=None,
 ):
-    """
-    Display random samples of images from a Dataset using matplotlib.
+    """Displays random samples of images from a Dataset.
+
+    Randomly selects and displays images from a PyTorch Dataset with their
+    corresponding labels as titles.
 
     Args:
-        dataset: torch.utils.data.Dataset returning image and label tensors.
-        image_inverse_transform (callable, optional): Function to inverse-transform images before display.
-        samples (int, optional): Number of images to display. Defaults to 9.
-        cols (int, optional): Number of columns in the grid. Defaults to 3.
-        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
-        classes (List[str], optional): List of class names for labels.
-        title_color (str, optional): Color for image titles.
+        dataset: PyTorch Dataset returning (image, label) tuples.
+        image_inverse_transform: Optional callable to reverse image normalization
+            or transformations before display (e.g., denormalization). Defaults to None.
+        samples: Number of images to display. Defaults to 9.
+        cols: Number of columns in the grid. Defaults to 3.
+        figsize: Size of the matplotlib figure as (width, height) tuple.
+            Defaults to (10, 10).
+        classes: Optional list of class names for converting label indices to
+            text. If None and dataset has a 'classes' attribute, uses that.
+            Defaults to None.
+        title_color: Optional color string for all image titles (e.g., 'blue').
+            Defaults to None.
 
-    Returns:
-        None
+    Note:
+        Images are randomly sampled from the Dataset. If the Dataset has a
+        'classes' attribute, it will be used automatically for label names
+        unless overridden by the classes parameter.
     """
     x, y = get_random_samples_batch_from_dataset(dataset, samples=samples)
     x = transform_input(x, image_inverse_transform)
@@ -263,20 +310,28 @@ def show_images_from_folder(
     figsize=(10, 10),
     title_color=None,
 ):
-    """
-    Display random samples of images from a folder or list using matplotlib.
+    """Displays random samples of images from a folder.
+
+    Randomly selects and displays images from a directory with filenames as titles.
 
     Args:
-        img_dir (str): Directory containing image files.
-        images (List[str], optional): List of image filenames. If None, all files in img_dir are used.
-        open_file_func (callable, optional): Function to open image files. Defaults to PIL.Image.open.
-        samples (int, optional): Number of images to display. Defaults to 9.
-        cols (int, optional): Number of columns in the grid. Defaults to 3.
-        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
-        title_color (str, optional): Color for image titles.
+        img_dir: Directory path containing image files.
+        images: Optional list of image filenames to display. If None, all files
+            in img_dir are used and randomly sampled. Defaults to None.
+        open_file_func: Optional callable to open image files. Should accept a
+            file path and return an image object. If None, uses PIL.Image.open.
+            Defaults to None.
+        samples: Number of images to display. If fewer images exist, displays all.
+            Defaults to 9.
+        cols: Number of columns in the grid. Defaults to 3.
+        figsize: Size of the matplotlib figure as (width, height) tuple.
+            Defaults to (10, 10).
+        title_color: Optional color string for all image titles (e.g., 'blue').
+            Defaults to None.
 
-    Returns:
-        None
+    Note:
+        If the number of requested samples exceeds available images, all images
+        are displayed. Images are randomly sampled without replacement.
     """
     if not images:
         files = os.listdir(img_dir)
@@ -308,26 +363,46 @@ def show_images_from_dataframe(
     class_color_map: dict = None,
     cmap: str = "tab10",
 ):
-    """
-    Display random samples of images from a DataFrame using matplotlib.
+    """Displays random samples of images from a pandas DataFrame.
+
+    Randomly selects and displays images specified in a DataFrame, with optional
+    labels and bounding boxes.
 
     Args:
-        dataframe (pd.DataFrame): DataFrame containing image file info.
-        img_dir (str, optional): Directory containing images. If None, file paths must be absolute.
-        image_file_name_column (str, optional): Column name for image filenames. Defaults to "image".
-        image_filepath_column (str, optional): Column name for absolute image file paths.
-        open_file_func (callable, optional): Function to open image files. Defaults to PIL.Image.open.
-        label_column (str, optional): Column name for image labels.
-        bbox_label_column (str, optional): Column name for bounding boxes (list of [id, x_min, y_min, width, height]).
-        samples (int, optional): Number of images to display. Defaults to 9.
-        cols (int, optional): Number of columns in the grid. Defaults to 3.
-        figsize (Tuple[int, int], optional): Size of the matplotlib figure. Defaults to (10, 10).
-        classes (List[str], optional): List of class names for bbox labels.
-        class_color_map (dict, optional): Mapping from class id or class name to a color string (e.g. '#ff0000').
-        cmap (str, optional): Matplotlib colormap name used as fallback when class_color_map does not provide a color.
+        dataframe: pandas DataFrame containing image file information.
+        img_dir: Directory containing images. Required if image_filepath_column
+            is not provided. Defaults to None.
+        image_file_name_column: Column name containing image filenames (used with
+            img_dir). Defaults to "image".
+        image_filepath_column: Column name containing absolute image file paths.
+            If provided, takes precedence over image_file_name_column and img_dir.
+            Defaults to None.
+        open_file_func: Optional callable to open image files. Should accept a
+            file path and return an image object. If None, uses PIL.Image.open.
+            Defaults to None.
+        label_column: Column name containing image labels. If None, displays row
+            indices instead. Defaults to None.
+        bbox_label_column: Column name containing bounding box data. Each entry
+            should be a list of bounding boxes in format [class_id, xmin, ymin,
+            width, height]. If provided, displays images with bounding boxes.
+            Defaults to None.
+        samples: Number of random images to display from the DataFrame.
+            Defaults to 9.
+        cols: Number of columns in the grid. Defaults to 3.
+        figsize: Size of the matplotlib figure as (width, height) tuple.
+            Defaults to (10, 10).
+        classes: Optional list mapping class indices to class names for bbox
+            labels. Defaults to None.
+        class_color_map: Optional dictionary mapping class IDs or names to color
+            strings (e.g., '#ff0000', 'red'). Used for bbox colors. Defaults to None.
+        cmap: Matplotlib colormap name used as fallback for bbox colors when
+            class_color_map doesn't provide a color. Defaults to "tab10".
 
-    Returns:
-        None
+    Note:
+        - If bbox_label_column is provided, displays images with bounding boxes
+          using plot_images_with_bboxes.
+        - Otherwise, displays images with titles using plot_images_with_title.
+        - Images are randomly sampled from the DataFrame.
     """
     samples = dataframe.sample(samples)
     open_file_func = Image.open if open_file_func is None else open_file_func

@@ -1,13 +1,8 @@
-import glob
 import importlib.resources as resources
-import os
-from datetime import datetime
 
 import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
-
-from deepml.constants import RUN_DIR_NAME
 
 with resources.path("deepml.resources.fonts", "OpenSans-Light.ttf") as font_path:
     font_resource = str(font_path)
@@ -27,29 +22,6 @@ def create_text_image(text, img_size=(224, 224), text_color="black"):
         font=FONT,
     )
     return image
-
-
-def get_datetime():
-    date, timestamp = str(datetime.now()).split(" ")
-    return "-".join((date.replace("-", "_"), timestamp.replace(":", "_").split(".")[0]))
-
-
-def find_new_run_dir_name(target_dir):
-    files = glob.glob(os.path.join(target_dir, "{}*".format(RUN_DIR_NAME)))
-
-    if len(files) == 0:
-        return RUN_DIR_NAME + str(1)
-
-    run_numbers = map(lambda filename: int(filename.split(".")[-1]), files)
-
-    # Return new run number
-    return RUN_DIR_NAME + str(max(run_numbers) + 1)
-
-
-def binarize(output: torch.FloatTensor, threshold: float = 0.50):
-    output[output >= threshold] = 255
-    output[output < threshold] = 0
-    return output.to(torch.uint8)
 
 
 def transform_target(target, classes=None):

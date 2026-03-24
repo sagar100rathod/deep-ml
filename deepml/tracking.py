@@ -112,11 +112,7 @@ class TensorboardLogger(MLExperimentLogger):
         """
         super().__init__()
         self.__model_dir = model_dir
-        self.writer = SummaryWriter(
-            os.path.join(
-                self.__model_dir, utils.find_new_run_dir_name(self.__model_dir)
-            )
-        )
+        self.writer = SummaryWriter(self.__model_dir)
 
     def log_params(self, **kwargs):
         """Logs hyperparameters and model graph to TensorBoard.

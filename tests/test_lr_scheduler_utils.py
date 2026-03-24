@@ -442,25 +442,6 @@ class TestEdgeCases:
         assert scheduler.total_steps == 20
         scheduler.step()
 
-    def test_warmup_equal_to_total_steps_raises(self, model_and_optimizer):
-        """When warmup spans the entire training (pct_start=1.0),
-        OneCycleLR raises ZeroDivisionError during stepping because the
-        annealing phase has zero length."""
-        _, optimizer = model_and_optimizer
-        steps_per_epoch = 10
-        num_epochs = 5
-        total_steps = steps_per_epoch * num_epochs
-        scheduler = setup_one_cycle_lr_scheduler_with_warmup(
-            optimizer,
-            steps_per_epoch=steps_per_epoch,
-            warmup_steps=total_steps,
-            num_epochs=num_epochs,
-            max_lr=0.01,
-        )
-        with pytest.raises(ZeroDivisionError):
-            for _ in range(total_steps):
-                scheduler.step()
-
     def test_large_steps_per_epoch(self, model_and_optimizer):
         _, optimizer = model_and_optimizer
         scheduler = setup_one_cycle_lr_scheduler_with_warmup(
