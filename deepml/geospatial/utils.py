@@ -1,10 +1,12 @@
 import os
+
 import numpy as np
 from PIL import Image
 
 
-def create_chips(input_image, label_image, out_dir, stride=256, window_size=256,
-                 geo_tagged=True):
+def create_chips(
+    input_image, label_image, out_dir, stride=256, window_size=256, geo_tagged=True
+):
     """
     Creates image chips of given windows_size from large image.
     Output image filenames are stored with index.
@@ -21,6 +23,7 @@ def create_chips(input_image, label_image, out_dir, stride=256, window_size=256,
 
     if geo_tagged:
         import rasterio as rs
+
         image = rs.open(input_image)
         label = rs.open(label_image) if label_image else None
         imgarr = image.read()
@@ -63,10 +66,10 @@ def create_chips(input_image, label_image, out_dir, stride=256, window_size=256,
             if i + window_size > imgarr.shape[1]:
                 i = imgarr.shape[1] - window_size
 
-            img = imgarr[:, i:i + window_size, j:j + window_size]
+            img = imgarr[:, i : i + window_size, j : j + window_size]
 
             if label_image:
-                lbl = invarr[i:i + window_size, j:j + window_size]
+                lbl = invarr[i : i + window_size, j : j + window_size]
 
             if img.shape[1] != window_size or img.shape[2] != window_size:
                 continue
@@ -77,21 +80,41 @@ def create_chips(input_image, label_image, out_dir, stride=256, window_size=256,
                 lbl_out_file = f"{label_filename}_{index}{label_ext}"
 
             if geo_tagged:
-                x, y = (j * image.transform[0] + image.transform[2]), (image.transform[5] + i * image.transform[4])
+                x, y = (j * image.transform[0] + image.transform[2]), (
+                    image.transform[5] + i * image.transform[4]
+                )
                 transform = [image.transform[0], 0, x, 0, image.transform[4], y]
 
-                with rs.open(os.path.join(images_out_dir, img_out_file), "w", driver='GTiff', count=imgarr.shape[0],
-                             dtype=imgarr.dtype, width=window_size, height=window_size, transform=transform,
-                             crs=image.crs) as raschip:
+                with rs.open(
+                    os.path.join(images_out_dir, img_out_file),
+                    "w",
+                    driver="GTiff",
+                    count=imgarr.shape[0],
+                    dtype=imgarr.dtype,
+                    width=window_size,
+                    height=window_size,
+                    transform=transform,
+                    crs=image.crs,
+                ) as raschip:
                     raschip.write(img)
 
                 if label_image:
-                    with rs.open(os.path.join(labels_out_dir, lbl_out_file), "w", driver='GTiff', count=1,
-                                 dtype=invarr.dtype,
-                                 width=window_size, height=window_size, transform=transform, crs=image.crs) as lblchip:
+                    with rs.open(
+                        os.path.join(labels_out_dir, lbl_out_file),
+                        "w",
+                        driver="GTiff",
+                        count=1,
+                        dtype=invarr.dtype,
+                        width=window_size,
+                        height=window_size,
+                        transform=transform,
+                        crs=image.crs,
+                    ) as lblchip:
                         lblchip.write(lbl, 1)
             else:
-                Image.fromarray(np.array(img).transpose(1, 2, 0)).save(os.path.join(images_out_dir, img_out_file))
+                Image.fromarray(np.array(img).transpose(1, 2, 0)).save(
+                    os.path.join(images_out_dir, img_out_file)
+                )
 
                 if label_image:
                     palette = label.getpalette()
