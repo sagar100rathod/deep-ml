@@ -15,10 +15,28 @@ from deepml.tracking import MLExperimentLogger, TensorboardLogger
 MAC_TORCH_2_2_2 = "2.2.2"  # Minimum torch version required for this module
 
 
-@warnings.deprecated(
-    "deepml.trainer.Learner is deprecated and will be removed in future releases. "
-)
 class Learner:
+    """Training class for learning model weights using PyTorch (DEPRECATED).
+
+    .. deprecated::
+        Use :class:`FabricTrainer` or :class:`AcceleratorTrainer` instead.
+        This class will be removed in future releases.
+
+    This trainer provides basic training functionality with support for learning
+    rate scheduling, automatic mixed precision (AMP), gradient accumulation, and
+    gradient clipping.
+
+    Attributes:
+        epochs_completed: Number of epochs completed in training.
+        best_val_loss: Best validation loss achieved during training.
+        history: Dictionary storing training history metrics across epochs.
+        logger: Experiment logger for tracking metrics and artifacts.
+
+    Warning:
+        This class is deprecated. Please migrate to:
+        - :class:`FabricTrainer` for Lightning Fabric-based training
+        - :class:`AcceleratorTrainer` for HuggingFace Accelerate-based training
+    """
 
     def __init__(
         self,
@@ -30,22 +48,31 @@ class Learner:
         load_state: bool = False,
         use_amp: bool = False,
     ):
-        """
-        Training class for learning a model weights using particular task.
+        """Initializes the Learner (DEPRECATED).
 
-        :param task: Object of subclass deepml.tasks.Task
-        :param optimizer: The optimizer from torch.optim
-        :param criterion: The loss function
-        :param load_state: Weather to resume model training. Default is False.
-                            If true, optimizer state is loaded with load_state_dict and history of epoch.
-                            Also, lr_scheduler state is reinitialized if any.
-        :param lr_scheduler: the learning rate scheduler, default is None.
-        :param lr_scheduler_step_policy: It is the time when lr_scheduler.step() would be called.
-                                         Default is "epoch" policy.
-                                         Use "step" policy if you want lr_scheduler.step() to be
-                                         called after each gradient update step.
-        :param use_amp: Whether to use automatic mixed precision (AMP) for training. Default is False.
+        Args:
+            task: Task object defining the learning task (e.g., classification, segmentation).
+            optimizer: PyTorch optimizer instance for parameter updates.
+            criterion: Loss function module.
+            lr_scheduler: Learning rate scheduler instance. Defaults to None.
+            lr_scheduler_step_policy: When to call scheduler.step(). Valid options are
+                ``"epoch"`` (step after each epoch) or ``"step"`` (step after each
+                optimizer update). Defaults to ``"epoch"``.
+            load_state: Whether to resume model training. If True, loads optimizer state,
+                scheduler state (if any), and training history from checkpoint.
+                Defaults to False.
+            use_amp: Whether to use automatic mixed precision (AMP) for training.
+                Defaults to False.
+
+        Warning:
+            This class is deprecated. Use FabricTrainer or AcceleratorTrainer instead.
         """
+        warnings.warn(
+            "deepml.trainer.Learner is deprecated and will be removed in future releases. "
+            "Use FabricTrainer or AcceleratorTrainer instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         assert isinstance(task, Task)
 
         self.__predictor = task
@@ -86,14 +113,40 @@ class Learner:
             self.__load_state()
 
     def set_optimizer(self, optimizer: torch.optim.Optimizer):
+        """Sets the optimizer for training.
+
+        Args:
+            optimizer: PyTorch optimizer instance.
+
+        Raises:
+            AssertionError: If optimizer is not a torch.optim.Optimizer instance.
+        """
         assert isinstance(optimizer, torch.optim.Optimizer)
         self.__optimizer = optimizer
 
     def set_criterion(self, criterion: torch.nn.Module):
+        """Sets the loss function for training.
+
+        Args:
+            criterion: Loss function module.
+
+        Raises:
+            AssertionError: If criterion is not a torch.nn.Module instance.
+        """
         assert isinstance(criterion, torch.nn.Module)
         self.__criterion = criterion
 
     def set_lr_scheduler(self, lr_scheduler, lr_scheduler_step_policy: str = "epoch"):
+        """Sets the learning rate scheduler.
+
+        Args:
+            lr_scheduler: Learning rate scheduler instance. If None, no scheduler is used.
+            lr_scheduler_step_policy: When to call scheduler.step(). Valid options are
+                ``"epoch"`` or ``"step"``. Defaults to ``"epoch"``.
+
+        Raises:
+            AssertionError: If lr_scheduler_step_policy is not ``"epoch"`` or ``"step"``.
+        """
         if lr_scheduler:
             lr_scheduler_step_policy = lr_scheduler_step_policy.lower()
             assert isinstance(
@@ -156,6 +209,25 @@ class Learner:
         train_loss: float = None,
         val_loss: float = None,
     ):
+        """Saves model checkpoint and training state.
+
+        Args:
+            tag: Name tag for the checkpoint file (without extension).
+            save_optimizer_state: Whether to include optimizer state in the checkpoint.
+                Defaults to False.
+            epoch: Current epoch number. Defaults to -1.
+            train_loss: Training loss value for this checkpoint. Defaults to None.
+            val_loss: Validation loss value for this checkpoint. Defaults to None.
+
+        Returns:
+            str: Full path to the saved checkpoint file.
+
+        Note:
+            - Automatically handles DataParallel models
+            - Saves scheduler state if scheduler is configured
+            - Saves AMP scaler state if AMP is enabled
+            - Logs the model to the experiment logger
+        """
 
         state_dict = {
             "model_state_dict": (
@@ -194,6 +266,25 @@ class Learner:
         metrics: Dict[str, torch.nn.Module] = None,
         non_blocking=False,
     ):
+        """Evaluates the model on the validation data.
+
+        Args:
+            loader: DataLoader for validation data.
+            criterion: Loss function module.
+            metrics: Dictionary mapping metric names to metric modules. Defaults to None.
+            non_blocking: Whether to use asynchronous CUDA transfers. Defaults to False.
+
+        Returns:
+            OrderedDict mapping metric names to their average values across all batches.
+
+        Raises:
+            Exception: If loader is None.
+
+        Note:
+            - Model is set to eval() mode
+            - Gradients are disabled via @torch.no_grad() decorator
+            - Metrics are computed as running averages
+        """
         if loader is None:
             raise Exception("Loader cannot be None.")
 
@@ -308,50 +399,51 @@ class Learner:
         image_inverse_transform: Callable = None,
         logger_img_size: Union[int, Tuple[int, int]] = None,
     ):
-        """
-        Trains the model on specified train loader for specified number of epochs.
+        """Trains the model for the specified number of epochs (DEPRECATED).
 
-        Parameters
-        ----------
-        :param train_loader: The torch.utils.data.DataLoader for model to train on.
+        Args:
+            train_loader: DataLoader for training data.
+            val_loader: DataLoader for validation data. Defaults to None.
+            epochs: Total number of epochs to train. Defaults to 10.
+            steps_per_epoch: Number of steps per epoch. Should be around len(train_loader)
+                to ensure full dataset coverage. If None, defaults to len(train_loader).
+                Defaults to None.
+            save_model_after_every_epoch: Frequency (in epochs) to save model checkpoints.
+                Defaults to 5.
+            metrics: Dictionary mapping metric names to metric instances. Each metric
+                must be a torch.nn.Module with a forward() method. Defaults to None.
+            gradient_accumulation_steps: Number of steps to accumulate gradients before
+                performing an optimizer step. Simulates larger batch sizes. Must be > 0.
+                Defaults to 1.
+            gradient_clip_value: Maximum value for gradient clipping. If 0, no clipping
+                is applied. Defaults to 0.
+            gradient_clip_algorithm: Gradient clipping algorithm. Options:
+                - ``"norm"``: Clip by gradient norm (recommended)
+                - ``"value"``: Clip by gradient value
+                Defaults to ``"norm"``.
+            logger: Experiment logger for tracking metrics and artifacts. If None, uses
+                TensorboardLogger. Defaults to None.
+            non_blocking: Whether to use asynchronous CUDA tensor transfers.
+                Defaults to True.
+            image_inverse_transform: Transformation to reverse image normalization for
+                visualization in TensorBoard. Defaults to None.
+            logger_img_size: Image size (int or tuple) for TensorBoard logging.
+                Defaults to None.
 
-        :param val_loader: The torch.utils.data.DataLoader for model to validate on.
-                           Default is None.
+        Raises:
+            AssertionError: If steps_per_epoch > len(train_loader).
+            AssertionError: If gradient_accumulation_steps <= 0.
+            AssertionError: If gradient_clip_algorithm not in ["norm", "value"].
+            TypeError: If any metric is not a torch.nn.Module with a forward() method.
 
-        :param epochs: int The number of epochs to train. Default is 10
+        Warning:
+            This class is deprecated. Use FabricTrainer or AcceleratorTrainer instead.
 
-        :param steps_per_epoch: Should be around len(train_loader), so that every example in the
-                                dataset gets covered in each epoch.
-
-        :param save_model_after_every_epoch: To save the model after every number of completed epochs
-                                            Default is 5.
-
-        :param metrics: dictionary of metrics 'metric_name': metric instance to monitor.
-                        Metric name is used as label for logging metric value to console and tensorboard.
-                        Metric instance must be subclass of torch.nn.Module, which implements forward function and
-                        returns calculated value.
-
-        :param non_blocking:  weather to enable asynchronous cuda tensor transfer. Default is True.
-
-        :param gradient_accumulation_steps : Number of steps to accumulate gradients before updating the model parameters.
-                                    It is a way to simulate a larger batch size without increasing the memory footprint.
-
-        :param gradient_clip_value: The maximum value for gradient clipping. Default is 0, which means no clipping.
-                                    The gradients will be clipped to the range [-gradient_clip_value, gradient_clip_value]
-
-        :param gradient_clip_algorithm: Default is "norm", which means gradient clipping is done using the norm of the gradients.
-                                        "value" means gradient clipping is done using the value of the gradients.
-                                        "agc" means adaptive gradient clipping.
-                                        Should be one of ["norm", "value"].
-
-        :param logger: MLExperimentLogger instance to log the training metrics and model artifacts.
-
-        :param image_inverse_transform: It denotes reverse transformations of image normalization so that images
-                                        can be displayed on tensor board.
-                                        Default is deepml.transforms.ImageNetInverseTransform() which is
-                                        an inverse of ImageNet normalization.
-
-        :param logger_img_size:  image size to use for writing images to tensorboard
+        Note:
+            - Supports automatic mixed precision (AMP) if enabled in __init__
+            - Automatically saves best validation model when validation improves
+            - Handles DataParallel models automatically
+            - Learning rate scheduler can step per epoch or per gradient update
         """
         if steps_per_epoch is None:
             steps_per_epoch = len(train_loader)
@@ -580,16 +672,51 @@ class Learner:
         )
 
     def predict(self, loader):
+        """Generates predictions for all data in the loader.
+
+        Args:
+            loader: DataLoader containing data for prediction.
+
+        Returns:
+            Tuple of (predictions, targets) where predictions are the model outputs
+            and targets are the ground truth labels.
+        """
         predictions, targets = self.__predictor.predict(loader)
         return predictions, targets
 
     def predict_class(self, loader):
+        """Generates class predictions with probabilities for all data.
+
+        Args:
+            loader: DataLoader containing data for prediction.
+
+        Returns:
+            Tuple of (predicted_class, probability, targets) where:
+                - predicted_class: Predicted class labels
+                - probability: Class probabilities or confidence scores
+                - targets: Ground truth labels
+        """
         predicted_class, probability, targets = self.__predictor.predict_class(loader)
         return predicted_class, probability, targets
 
     def extract_features(
         self, loader, no_of_features, features_csv_file, iterations=1, target_known=True
     ):
+        """Extracts features from the model and saves them to a CSV file.
+
+        Args:
+            loader: DataLoader containing data for feature extraction.
+            no_of_features: Number of features to extract from the model.
+            features_csv_file: Path to the output CSV file.
+            iterations: Number of passes through the loader. Defaults to 1.
+            target_known: Whether ground truth labels are available. If True,
+                includes labels in the CSV file. Defaults to True.
+
+        Note:
+            - Features are extracted in evaluation mode
+            - CSV format: If target_known=True: [class, feat_0, feat_1, ...]
+            - CSV format: If target_known=False: [feat_0, feat_1, ...]
+        """
 
         fp = open(features_csv_file, "w")
         csv_writer = csv.writer(fp)
@@ -628,6 +755,18 @@ class Learner:
         figsize=(10, 10),
         target_known=True,
     ):
+        """Visualizes model predictions on sample images.
+
+        Args:
+            loader: DataLoader containing data for visualization.
+            image_inverse_transform: Transformation to reverse image normalization for
+                display. Defaults to None.
+            samples: Number of samples to display. Defaults to 9.
+            cols: Number of columns in the visualization grid. Defaults to 3.
+            figsize: Figure size as (width, height) tuple. Defaults to (10, 10).
+            target_known: Whether ground truth targets are available for comparison.
+                Defaults to True.
+        """
 
         self.__predictor.show_predictions(
             loader,
