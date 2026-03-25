@@ -292,9 +292,6 @@ class FabricTrainer(BaseLearner):
             state_dict = torch.load(resume_from_checkpoint, map_location=fabric.device)
             self._model.load_state_dict(state_dict["model_state_dict"])
 
-            if load_optimizer_state:
-                FabricTrainer.load_optimizer_state(self._optimizer, state_dict)
-
             self.epochs_completed = state_dict.get("epoch", 0)
             self.best_val_loss = state_dict.get("val_loss", float("inf"))
 
@@ -304,6 +301,10 @@ class FabricTrainer(BaseLearner):
                 )
 
         model, optimizer = fabric.setup(self._model, self._optimizer)
+
+        if load_optimizer_state:
+            FabricTrainer.load_optimizer_state(optimizer, state_dict)
+
         train_loader, val_loader = fabric.setup_dataloaders(train_loader, val_loader)
         lr_scheduler = (
             self._lr_scheduler_fn(optimizer)
