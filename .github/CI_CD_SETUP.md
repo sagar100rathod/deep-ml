@@ -335,16 +335,26 @@ Add the following secrets:
 2. Enable **CodeQL analysis**
 3. GitHub will automatically scan for vulnerabilities
 
-### 4. Branch Protection (Recommended)
+### 4. Branch Protection ✅ (Already Configured)
 
-Go to **Settings → Branches → Add branch protection rule**
+**Status:** Branch protection is already enabled for `main` branch requiring pull requests before merge.
 
-For `main` branch:
-- ✅ Require pull request reviews (1 approval)
-- ✅ Require status checks to pass
-  - Select: `lint`, `test`, `build`, `verify-package`
-- ✅ Require conversation resolution
-- ✅ Do not allow bypassing the above settings
+**Recommended status checks to require:**
+- `lint` - Code formatting validation
+- `test (ubuntu-latest, 3.11)` - Ubuntu Python 3.11 tests
+- `test (ubuntu-latest, 3.12)` - Ubuntu Python 3.12 tests
+- `test (macos-latest, 3.11)` - macOS Python 3.11 tests
+- `test (macos-latest, 3.12)` - macOS Python 3.12 tests
+- `test (windows-latest, 3.11)` - Windows Python 3.11 tests
+- `test (windows-latest, 3.12)` - Windows Python 3.12 tests
+- `build` - Package build verification
+- `verify-package` - Installation verification
+
+**To add these:**
+1. Go to **Settings → Branches → Edit protection rule for `main`**
+2. Enable "Require status checks to pass before merging"
+3. Search for and select the checks listed above
+4. Save changes
 
 ---
 
@@ -480,7 +490,8 @@ Use this checklist to verify your CI/CD setup:
 - [ ] All workflow files are in `.github/workflows/`
 - [ ] GitHub secrets configured (PYPI_API_TOKEN, TEST_PYPI_API_TOKEN)
 - [ ] GitHub Pages enabled with "GitHub Actions" source
-- [ ] Branch protection rules set for `main`
+- [x] Branch protection rules set for `main` ✅ (Already configured)
+- [ ] Required status checks added to branch protection
 - [ ] CodeQL analysis enabled
 - [ ] Dependabot configured and enabled
 - [ ] Issue templates available
