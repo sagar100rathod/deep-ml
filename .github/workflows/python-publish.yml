@@ -1,0 +1,76 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'PyPI repository (pypi or testpypi)'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - pypi
+          - testpypi
+
+jobs:
+  publish:
+    name: Build and Publish Package
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.repository || 'pypi' }}
+    permissions:
+      id-token: write  # For trusted publishing
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: "1.7.0"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run tests
+        run: poetry run pytest tests/ -v
+
+      - name: Build package
+        run: poetry build
+
+      - name: Check distribution files
+        run: |
+          ls -lh dist/
+          poetry run twine check dist/*
+
+      - name: Publish to Test PyPI
+        if: github.event.inputs.repository == 'testpypi' || github.event_name == 'workflow_dispatch'
+        env:
+          POETRY_PYPI_TOKEN_TESTPYPI: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: |
+          poetry config repositories.testpypi https://test.pypi.org/legacy/
+          poetry publish -r testpypi --sagar100rathod __token__ --password $POETRY_PYPI_TOKEN_TESTPYPI
+
+      - name: Publish to PyPI
+        if: github.event_name == 'release' || github.event.inputs.repository == 'pypi'
+        env:
+          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          poetry publish --username __token__ --password $POETRY_PYPI_TOKEN_PYPI
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
+          retention-days: 30

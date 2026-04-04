@@ -1,0 +1,54 @@
+# Configuration for auto-labeling PRs based on changed files
+
+'documentation':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'docs/**/*'
+      - '*.md'
+      - 'README.*'
+
+'tests':
+  - changed-files:
+    - any-glob-to-any-file: 'tests/**/*'
+
+'dependencies':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pyproject.toml'
+      - 'poetry.lock'
+      - 'requirements*.txt'
+
+'ci/cd':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**/*'
+      - '.pre-commit-config.yaml'
+      - 'Makefile'
+
+'core':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'deepml/**/*.py'
+
+'tasks':
+  - changed-files:
+    - any-glob-to-any-file: 'deepml/tasks.py'
+
+'trainers':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'deepml/*trainer*.py'
+      - 'deepml/fabric_trainer.py'
+      - 'deepml/accelerator_trainer.py'
+
+'metrics':
+  - changed-files:
+    - any-glob-to-any-file: 'deepml/metrics/**/*'
+
+'notebooks':
+  - changed-files:
+    - any-glob-to-any-file: 'notebooks/**/*'
+
+'scripts':
+  - changed-files:
+    - any-glob-to-any-file: 'scripts/**/*'

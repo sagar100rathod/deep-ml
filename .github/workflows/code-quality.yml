@@ -1,0 +1,104 @@
+name: Code Quality & Security
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run weekly on Mondays at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+jobs:
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: "1.7.0"
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction
+          poetry add --group dev pylint flake8 mypy bandit safety
+
+      - name: Run Pylint
+        continue-on-error: true
+        run: |
+          poetry run pylint deepml --output-format=text --reports=y > pylint-report.txt || true
+          cat pylint-report.txt
+
+      - name: Run Flake8
+        continue-on-error: true
+        run: |
+          poetry run flake8 deepml --count --select=E9,F63,F7,F82 --show-source --statistics
+          poetry run flake8 deepml --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Run MyPy type checking
+        continue-on-error: true
+        run: |
+          poetry run mypy deepml --ignore-missing-imports --no-strict-optional
+
+      - name: Security check with Bandit
+        continue-on-error: true
+        run: |
+          poetry run bandit -r deepml -f json -o bandit-report.json || true
+          poetry run bandit -r deepml || true
+
+      - name: Check dependencies for vulnerabilities
+        continue-on-error: true
+        run: |
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
+          poetry run safety check --file requirements.txt --json || true
+
+      - name: Upload code quality artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: code-quality-reports
+          path: |
+            pylint-report.txt
+            bandit-report.json
+          retention-days: 30
+
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'python' ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: +security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
