@@ -63,7 +63,7 @@ jobs:
           poetry run safety check --file requirements.txt --json || true
 
       - name: Upload code quality artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: code-quality-reports
