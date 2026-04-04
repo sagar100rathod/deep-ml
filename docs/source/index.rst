@@ -1,6 +1,6 @@
 .. deep-ml documentation master file
 
-deep-ml: PyTorch Training Framework
+Welcome to deep-ml's documentation!
 ====================================
 
 .. image:: https://img.shields.io/badge/License-MIT-green

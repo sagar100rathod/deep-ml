@@ -57,7 +57,7 @@ git push origin ci/add-workflows
 gh pr create --title "Add comprehensive CI/CD workflows" --body "This PR adds complete CI/CD infrastructure including testing, publishing, documentation, and automation workflows."
 
 # Or create PR via GitHub UI
-# Go to: https://github.com/YOUR_USERNAME/deep-ml/pulls
+# Go to: https://github.com/sagar100rathod/deep-ml/pulls
 ```
 
 After creating the PR:

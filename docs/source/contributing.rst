@@ -12,7 +12,7 @@ Fork and Clone
 .. code-block:: bash
 
    # Fork the repository on GitHub, then:
-   git clone https://github.com/YOUR_USERNAME/deep-ml.git
+   git clone https://github.com/sagar100rathod/deep-ml.git
    cd deep-ml
 
 Setup Development Environment

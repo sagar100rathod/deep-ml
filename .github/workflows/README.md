@@ -5,7 +5,7 @@ This directory contains automated CI/CD workflows for the deep-ml project.
 ## 📋 Workflows Overview
 
 ### 1. **CI (Continuous Integration)** - `python-ci.yml`
-[![CI](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-ci.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-ci.yml)
+[![CI](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-ci.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-ci.yml)
 
 **Triggers:** Push/PR to `main` or `develop` branches
 
@@ -24,7 +24,7 @@ This directory contains automated CI/CD workflows for the deep-ml project.
 ---
 
 ### 2. **Publish to PyPI** - `python-publish.yml`
-[![Publish](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-publish.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-publish.yml)
+[![Publish](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-publish.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-publish.yml)
 
 **Triggers:**
 - Release published
@@ -51,7 +51,7 @@ gh workflow run python-publish.yml -f repository=testpypi
 ---
 
 ### 3. **Documentation** - `docs.yml`
-[![Docs](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/docs.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/docs.yml)
+[![Docs](https://github.com/sagar100rathod/deep-ml/actions/workflows/docs.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/docs.yml)
 
 **Triggers:**
 - Push to `main` (docs/** or deepml/** changes)
@@ -63,12 +63,12 @@ gh workflow run python-publish.yml -f repository=testpypi
 - **deploy-docs**: Deploy to GitHub Pages (on push to main)
 
 **Deployment:**
-- Docs available at: `https://your-sagar100rathod.github.io/deep-ml/`
+- Docs available at: `https://sagar100rathod.github.io/deep-ml/`
 
 ---
 
 ### 4. **Release Management** - `release.yml`
-[![Release](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/release.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/release.yml)
+[![Release](https://github.com/sagar100rathod/deep-ml/actions/workflows/release.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/release.yml)
 
 **Triggers:**
 - Push tags matching `v*.*.*` pattern
@@ -94,7 +94,7 @@ gh workflow run release.yml -f version=2.0.2
 ---
 
 ### 5. **Code Quality & Security** - `code-quality.yml`
-[![Code Quality](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/code-quality.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/code-quality.yml)
+[![Code Quality](https://github.com/sagar100rathod/deep-ml/actions/workflows/code-quality.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/code-quality.yml)
 
 **Triggers:**
 - Push/PR to `main` or `develop`
@@ -114,7 +114,7 @@ gh workflow run release.yml -f version=2.0.2
 ---
 
 ### 6. **PR Automation** - `pr-automation.yml`
-[![PR Automation](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/pr-automation.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/pr-automation.yml)
+[![PR Automation](https://github.com/sagar100rathod/deep-ml/actions/workflows/pr-automation.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/pr-automation.yml)
 
 **Triggers:** PR opened/edited, Issues opened/edited
 
@@ -164,7 +164,7 @@ Go to **Settings → Secrets and Variables → Actions** and add:
 
 1. Go to **Settings → Pages**
 2. Source: **GitHub Actions**
-3. Docs will be available at: `https://your-sagar100rathod.github.io/deep-ml/`
+3. Docs will be available at: `https://sagar100rathod.github.io/deep-ml/`
 
 ### Enable CodeQL
 
@@ -281,10 +281,10 @@ gh workflow run python-publish.yml -f repository=pypi
 Add these badges to your README.md:
 
 ```markdown
-[![CI](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-ci.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-ci.yml)
-[![Publish](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-publish.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/python-publish.yml)
-[![Docs](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/docs.yml/badge.svg)](https://github.com/your-sagar100rathod/deep-ml/actions/workflows/docs.yml)
-[![codecov](https://codecov.io/gh/your-sagar100rathod/deep-ml/branch/main/graph/badge.svg)](https://codecov.io/gh/your-sagar100rathod/deep-ml)
+[![CI](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-ci.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-ci.yml)
+[![Publish](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-publish.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/python-publish.yml)
+[![Docs](https://github.com/sagar100rathod/deep-ml/actions/workflows/docs.yml/badge.svg)](https://github.com/sagar100rathod/deep-ml/actions/workflows/docs.yml)
+[![codecov](https://codecov.io/gh/sagar100rathod/deep-ml/branch/main/graph/badge.svg)](https://codecov.io/gh/sagar100rathod/deep-ml)
 ```
 
 ---
