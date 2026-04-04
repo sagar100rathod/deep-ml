@@ -5547,4 +5547,4 @@ dev = ["bandit", "black", "flake8", "isort", "mypy", "myst-parser", "pre-commit"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4"
-content-hash = "7e1291f5b84d1e2edc0128676accb44aec06f1b9e3f4778962af6daeb77e1d54"
+content-hash = "34b6b2f8c07662ba0b83609c8ecd691b34d2e4c316c796757edde86ba7f92b0d"
