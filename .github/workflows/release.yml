@@ -53,7 +53,7 @@ jobs:
           git commit -m "Bump version to ${{ steps.get_version.outputs.version }}" || echo "No changes to commit"
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: poetry install --no-interaction --extras dev
 
       - name: Run tests
         run: poetry run pytest tests/ -v

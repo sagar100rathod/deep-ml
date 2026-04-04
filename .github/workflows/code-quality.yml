@@ -29,9 +29,7 @@ jobs:
           poetry-version: "2.2.1"
 
       - name: Install dependencies
-        run: |
-          poetry install --no-interaction
-          poetry add --group dev pylint flake8 mypy bandit safety
+        run: poetry install --no-interaction --extras dev
 
       - name: Run Pylint
         continue-on-error: true
