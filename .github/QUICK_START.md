@@ -25,13 +25,18 @@
 2. Under **Source**, select **GitHub Actions**
 3. Click **Save**
 
-### Step 3: Push the Workflows (1 minute)
+### Step 3: Push the Workflows (2 minutes)
+
+**Note:** Since `main` branch has protection enabled, you'll need to create a PR:
 
 ```bash
 cd /Users/sagar.rathod/Documents/Github/deep-ml
 
+# Create a feature branch
+git checkout -b ci/add-workflows
+
 # Add all CI/CD files
-git add .github/ CONTRIBUTING.md
+git add .github/ CONTRIBUTING.md pyproject.toml poetry.lock
 
 # Commit
 git commit -m "ci: add comprehensive CI/CD workflows
@@ -42,11 +47,23 @@ git commit -m "ci: add comprehensive CI/CD workflows
 - Added release automation
 - Added code quality and security scanning
 - Added PR automation and templates
-- Added Dependabot configuration"
+- Added Dependabot configuration
+- Fixed pyproject.toml format (PEP 621)"
 
-# Push to trigger workflows
-git push origin main
+# Push to feature branch
+git push origin ci/add-workflows
+
+# Create pull request
+gh pr create --title "Add comprehensive CI/CD workflows" --body "This PR adds complete CI/CD infrastructure including testing, publishing, documentation, and automation workflows."
+
+# Or create PR via GitHub UI
+# Go to: https://github.com/YOUR_USERNAME/deep-ml/pulls
 ```
+
+After creating the PR:
+1. Wait for CI checks to pass (first run takes ~10 minutes)
+2. Review the PR
+3. Merge when ready
 
 ### Step 4: Verify Workflows (1 minute)
 

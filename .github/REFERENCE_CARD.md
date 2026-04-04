@@ -2,21 +2,47 @@
 
 ## 🎯 Essential Commands
 
-### Deploy CI/CD Pipeline
+### Deploy CI/CD Pipeline (via PR)
 ```bash
-git add .github/ CONTRIBUTING.md
+# Branch protection requires PRs
+git checkout -b ci/add-workflows
+git add .github/ CONTRIBUTING.md pyproject.toml poetry.lock
 git commit -m "ci: add comprehensive CI/CD workflows"
-git push origin main
+git push origin ci/add-workflows
+gh pr create --fill
+# Merge after CI passes
 ```
 
-### Make a Release
+### Create Feature Branch
 ```bash
-poetry version patch && \
-git add pyproject.toml && \
-git commit -m "chore: bump version" && \
-git push origin main && \
-git tag -a v$(poetry version -s) -m "Release $(poetry version -s)" && \
+git checkout -b feature/your-feature-name
+# ... make changes ...
+git commit -m "feat: add feature description"
+git push origin feature/your-feature-name
+gh pr create --fill
+```
+
+### Make a Release (via PR)
+```bash
+# Create release branch
+git checkout -b release/v$(poetry version -s)
+poetry version patch
+git add pyproject.toml
+git commit -m "chore: bump version"
+git push origin release/v$(poetry version -s)
+gh pr create --title "Release v$(poetry version -s)"
+# After merge:
+git checkout main && git pull
+git tag -a v$(poetry version -s) -m "Release $(poetry version -s)"
 git push origin --tags
+```
+
+### Update Branch with Main
+```bash
+# Keep your PR branch up to date
+git fetch origin
+git rebase origin/main
+git push --force-with-lease origin your-branch-name
 ```
 
 ### Test on TestPyPI
@@ -38,6 +64,7 @@ bash .github/validate-cicd.sh
 | Quick setup (5 min) | `.github/QUICK_START.md` |
 | Complete guide | `.github/CI_CD_SETUP.md` |
 | Architecture | `.github/ARCHITECTURE.md` |
+| PR Workflow (branch protection) | `.github/BRANCH_PROTECTION_WORKFLOW.md` |
 | This report | `.github/FINAL_REPORT.md` |
 | Workflows docs | `.github/workflows/README.md` |
 | Contributing | `CONTRIBUTING.md` |
