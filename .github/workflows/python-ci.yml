@@ -35,7 +35,7 @@ jobs:
           poetry-version: "1.7.0"
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: poetry install --no-interaction --with dev
 
       - name: Run Black formatter check
         run: poetry run black --check deepml tests
