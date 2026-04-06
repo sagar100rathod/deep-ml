@@ -7,8 +7,12 @@ Welcome to deep-ml's documentation!
    :target: https://opensource.org/licenses/MIT
    :alt: License: MIT
 
-.. image:: https://img.shields.io/badge/Python-3.8%2B-orange
+.. image:: https://img.shields.io/badge/Python-3.11%2B-orange
    :alt: Python Version
+
+.. image:: https://readthedocs.org/projects/deep-ml/badge/?version=latest
+   :target: https://deep-ml.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
 
 .. image:: https://static.pepy.tech/personalized-badge/deepml?period=total&units=international_system&left_color=black&right_color=brightgreen&left_text=Downloads
    :target: https://pepy.tech/project/deepml
@@ -22,9 +26,9 @@ Key Features
 ------------
 
 🚀 **Multiple Training Backends**
-   - **FabricTrainer**: Lightning Fabric for distributed training
+   - **FabricTrainer**: Lightning Fabric for distributed training (recommended)
    - **AcceleratorTrainer**: HuggingFace Accelerate integration
-   - **Learner**: Classic PyTorch trainer (deprecated)
+   - **Learner**: Classic PyTorch trainer
 
 🎯 **Pre-built Task Implementations**
    - Image Classification (single & multi-label)
