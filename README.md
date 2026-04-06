@@ -1,7 +1,8 @@
 # deep-ml
 
 ![Licence](https://img.shields.io/badge/License-MIT-green)
-![Python](https://img.shields.io/badge/Python-3.8%2B-orange)
+![Python](https://img.shields.io/badge/Python-3.11%2B-orange)
+[![Documentation Status](https://readthedocs.org/projects/deep-ml/badge/?version=latest)](https://deep-ml.readthedocs.io/en/latest/?badge=latest)
 [![Downloads](https://static.pepy.tech/personalized-badge/deepml?period=total&units=international_system&left_color=black&right_color=brightgreen&left_text=Downloads)](https://pepy.tech/project/deepml)
 ![Contributions welcome](https://img.shields.io/badge/Contributions-welcome-yellow)
 
@@ -142,13 +143,32 @@ trainer.fit(
 
 ## Documentation
 
-Full documentation is available at: [Documentation Link]
+📚 **Full documentation is available at: [https://deep-ml.readthedocs.io/](https://deep-ml.readthedocs.io/)**
 
-- **Getting Started**: Installation and quick start guide
-- **User Guide**: Detailed guides for trainers, tasks, datasets, etc.
-- **API Reference**: Complete API documentation
-- **Tutorials**: Step-by-step tutorials for common use cases
-- **Examples**: Complete example projects
+### Documentation Structure
+
+**Getting Started**
+- [Installation Guide](https://deep-ml.readthedocs.io/en/latest/installation.html)
+- [Quick Start Tutorial](https://deep-ml.readthedocs.io/en/latest/quickstart.html)
+- [Tutorials](https://deep-ml.readthedocs.io/en/latest/tutorials.html)
+
+**User Guide**
+- [Trainers](https://deep-ml.readthedocs.io/en/latest/trainers.html) - FabricTrainer, AcceleratorTrainer, Learner
+- [Tasks](https://deep-ml.readthedocs.io/en/latest/tasks.html) - Classification, Segmentation, Regression
+- [Datasets](https://deep-ml.readthedocs.io/en/latest/datasets.html) - Data loading utilities
+- [Loss Functions](https://deep-ml.readthedocs.io/en/latest/losses.html) - Custom losses for CV tasks
+- [Metrics](https://deep-ml.readthedocs.io/en/latest/metrics.html) - Evaluation metrics
+- [Tracking](https://deep-ml.readthedocs.io/en/latest/tracking.html) - MLflow, TensorBoard, Wandb
+- [Visualization](https://deep-ml.readthedocs.io/en/latest/visualization.html) - Result visualization
+
+**API Reference**
+- [Complete API Documentation](https://deep-ml.readthedocs.io/en/latest/modules.html)
+
+**Additional Resources**
+- [Examples](https://deep-ml.readthedocs.io/en/latest/examples.html)
+- [FAQ](https://deep-ml.readthedocs.io/en/latest/faq.html)
+- [Changelog](https://deep-ml.readthedocs.io/en/latest/changelog.html)
+- [Contributing](https://deep-ml.readthedocs.io/en/latest/contributing.html)
 
 ## Tutorials
 
@@ -161,7 +181,7 @@ Full documentation is available at: [Documentation Link]
 5. **Hyperparameter Tuning**: Optimize with Optuna
 6. **Model Deployment**: Export to TorchScript/ONNX
 
-See the [tutorials documentation](docs/source/tutorials.rst) for complete guides.
+📖 **See the [complete tutorials](https://deep-ml.readthedocs.io/en/latest/tutorials.html) on ReadTheDocs.**
 
 ## 💡 Advanced Features
 
@@ -263,7 +283,7 @@ trainer.fit(..., logger=logger)
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](docs/source/contributing.rst) for guidelines.
+Contributions are welcome! See our [Contributing Guide](https://deep-ml.readthedocs.io/en/latest/contributing.html) for guidelines.
 
 ### Development Setup
 
@@ -288,6 +308,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact
 
 - **Author**: Sagar Rathod
+- **Email**: sagar100rathod@gmail.com
 - **Issues**: [GitHub Issues](https://github.com/sagar100rathod/deep-ml/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/sagar100rathod/deep-ml/discussions)
 
@@ -302,8 +323,10 @@ If you use deep-ml in your research, please cite:
 ```bibtex
 @software{deepml2026,
   author = {Rathod, Sagar},
-  title = {deep-ml: PyTorch Training Framework},
+  title = {deep-ml: High-level PyTorch Training Framework for Computer Vision},
   year = {2026},
-  url = {https://github.com/sagar100rathod/deep-ml}
+  version = {3.0.0},
+  url = {https://github.com/sagar100rathod/deep-ml},
+  doi = {10.5281/zenodo.XXXXXXX}
 }
 ```
