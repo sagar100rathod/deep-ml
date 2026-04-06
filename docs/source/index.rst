@@ -26,9 +26,9 @@ Key Features
 ------------
 
 🚀 **Multiple Training Backends**
-   - **FabricTrainer**: Lightning Fabric for distributed training (recommended)
-   - **AcceleratorTrainer**: HuggingFace Accelerate integration
-   - **Learner**: Classic PyTorch trainer
+   - **FabricTrainer**: Lightning Fabric for distributed training (recommended for multi-GPU)
+   - **AcceleratorTrainer**: HuggingFace Accelerate integration (recommended for multi-GPU)
+   - **Learner**: Classic PyTorch trainer (single-device, notebook-friendly)
 
 🎯 **Pre-built Task Implementations**
    - Image Classification (single & multi-label)
