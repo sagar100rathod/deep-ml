@@ -1,6 +1,5 @@
 import csv
 import os
-import warnings
 from collections import OrderedDict, defaultdict
 from typing import Callable, Dict, Tuple, Union
 
@@ -12,19 +11,19 @@ import deepml.tasks
 from deepml.tasks import Task
 from deepml.tracking import MLExperimentLogger, TensorboardLogger
 
-MAC_TORCH_2_2_2 = "2.2.2"  # Minimum torch version required for this module
+MAC_TORCH_2_2_2 = "2.2.2"
 
 
 class Learner:
-    """Training class for learning model weights using PyTorch (DEPRECATED).
+    """Training class for learning model weights using PyTorch.
 
-    .. deprecated::
-        Use :class:`FabricTrainer` or :class:`AcceleratorTrainer` instead.
-        This class will be removed in future releases.
-
-    This trainer provides basic training functionality with support for learning
+    This trainer provides straightforward training functionality with support for learning
     rate scheduling, automatic mixed precision (AMP), gradient accumulation, and
-    gradient clipping.
+    gradient clipping. It's designed for single-device training and works well in
+    interactive environments like Jupyter notebooks.
+
+    For multi-GPU or distributed training, consider using :class:`FabricTrainer` or
+    :class:`AcceleratorTrainer`.
 
     Attributes:
         epochs_completed: Number of epochs completed in training.
@@ -32,10 +31,12 @@ class Learner:
         history: Dictionary storing training history metrics across epochs.
         logger: Experiment logger for tracking metrics and artifacts.
 
-    Warning:
-        This class is deprecated. Please migrate to:
-        - :class:`FabricTrainer` for Lightning Fabric-based training
-        - :class:`AcceleratorTrainer` for HuggingFace Accelerate-based training
+    Note:
+        This trainer is ideal for:
+        - Single GPU/CPU training
+        - Jupyter notebook environments
+        - Simple training workflows without distributed requirements
+        - Debugging and prototyping
     """
 
     def __init__(
@@ -48,7 +49,7 @@ class Learner:
         load_state: bool = False,
         use_amp: bool = False,
     ):
-        """Initializes the Learner (DEPRECATED).
+        """Initializes the Learner.
 
         Args:
             task: Task object defining the learning task (e.g., classification, segmentation).
@@ -63,16 +64,7 @@ class Learner:
                 Defaults to False.
             use_amp: Whether to use automatic mixed precision (AMP) for training.
                 Defaults to False.
-
-        Warning:
-            This class is deprecated. Use FabricTrainer or AcceleratorTrainer instead.
         """
-        warnings.warn(
-            "deepml.trainer.Learner is deprecated and will be removed in future releases. "
-            "Use FabricTrainer or AcceleratorTrainer instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         assert isinstance(task, Task)
 
         self.__predictor = task
@@ -399,7 +391,7 @@ class Learner:
         image_inverse_transform: Callable = None,
         logger_img_size: Union[int, Tuple[int, int]] = None,
     ):
-        """Trains the model for the specified number of epochs (DEPRECATED).
+        """Trains the model for the specified number of epochs.
 
         Args:
             train_loader: DataLoader for training data.
@@ -436,14 +428,12 @@ class Learner:
             AssertionError: If gradient_clip_algorithm not in ["norm", "value"].
             TypeError: If any metric is not a torch.nn.Module with a forward() method.
 
-        Warning:
-            This class is deprecated. Use FabricTrainer or AcceleratorTrainer instead.
-
         Note:
             - Supports automatic mixed precision (AMP) if enabled in __init__
             - Automatically saves best validation model when validation improves
             - Handles DataParallel models automatically
             - Learning rate scheduler can step per epoch or per gradient update
+            - For multi-GPU/distributed training, use FabricTrainer or AcceleratorTrainer
         """
         if steps_per_epoch is None:
             steps_per_epoch = len(train_loader)
