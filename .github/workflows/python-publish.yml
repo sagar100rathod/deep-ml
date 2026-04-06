@@ -59,7 +59,7 @@ jobs:
           POETRY_PYPI_TOKEN_TESTPYPI: ${{ secrets.TEST_PYPI_API_TOKEN }}
         run: |
           poetry config repositories.testpypi https://test.pypi.org/legacy/
-          poetry publish -r testpypi --sagar100rathod __token__ --password $POETRY_PYPI_TOKEN_TESTPYPI
+          poetry publish -r testpypi --username __token__ --password $POETRY_PYPI_TOKEN_TESTPYPI
 
       - name: Publish to PyPI
         if: github.event_name == 'release' || github.event.inputs.repository == 'pypi'
