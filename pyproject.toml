@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "deepml"
-version = "3.0.0"
+version = "3.0.1"
 description = "Wrapper Library for training deep neural networks using PyTorch framework."
 authors = [
     {name = "Sagar Rathod", email = "sagar100rathod@gmail.com"}
