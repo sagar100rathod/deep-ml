@@ -8,6 +8,7 @@ import torchvision
 sys.path.append("..")
 
 from deepml.fabric_trainer import FabricTrainer
+from deepml.lr_scheduler_utils import setup_one_cycle_lr_scheduler_with_warmup
 from deepml.metrics.classification import Accuracy
 from deepml.tasks import ImageClassification
 from deepml.tracking import MLFlowLogger
@@ -32,7 +33,7 @@ class MnistModel(torch.nn.Module):
 
 if __name__ == "__main__":
 
-    devices = 4  # number of devices to use, can be 1, 2, 4, etc.
+    DEVICES = 4  # number of devices to use, can be 1, 2, 4, etc.
     accelerator = "cpu"  # "cpu" or "cuda" for GPU training
 
     torch.manual_seed(123)
@@ -44,19 +45,28 @@ if __name__ == "__main__":
     test_dataset = torchvision.datasets.MNIST(
         "./data/", download=True, train=False, transform=transform
     )
-
-    model = MnistModel()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
-    lr_scheduler_fn = lambda optimizer: torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, factor=0.1, patience=10
-    )
-    criterion = torch.nn.CrossEntropyLoss()
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=16, num_workers=0, shuffle=True, drop_last=True
     )
+
     val_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=16, num_workers=0, shuffle=False, drop_last=True
     )
+
+    model = MnistModel()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+
+    NUM_EPOCHS = 10
+    GRADIENT_ACCUMULATION_STEPS = 4
+
+    lr_scheduler_fn = lambda optimizer: setup_one_cycle_lr_scheduler_with_warmup(
+        optimizer,
+        steps_per_epoch=len(train_loader) // GRADIENT_ACCUMULATION_STEPS // DEVICES,
+        # warmup_ratio=0.2,
+        warmup_steps=800,
+        num_epochs=NUM_EPOCHS,
+    )
+    criterion = torch.nn.CrossEntropyLoss()
 
     print("Train Samples:", len(train_dataset))
     print("Val Samples:", len(test_dataset))
@@ -72,7 +82,7 @@ if __name__ == "__main__":
         classification,
         optimizer,
         criterion,
-        devices=devices,
+        devices=DEVICES,
         accelerator=accelerator,
         precision="32-true",
         lr_scheduler_fn=lr_scheduler_fn,
@@ -90,9 +100,9 @@ if __name__ == "__main__":
     learner.fit(
         train_loader,
         val_loader,
-        epochs=10,
+        epochs=NUM_EPOCHS,
         metrics={"acc": Accuracy()},
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
         logger=MLFlowLogger(),
     )
 

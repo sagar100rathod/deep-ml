@@ -44,12 +44,13 @@ jobs:
             echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Update version in pyproject.toml
+      - name: Update version in pyproject.toml and __init__.py
         run: |
           poetry version ${{ steps.get_version.outputs.version }}
+          sed -i 's/^__version__ = .*/__version__ = "${{ steps.get_version.outputs.version }}"/' deepml/__init__.py
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add pyproject.toml
+          git add pyproject.toml deepml/__init__.py
           git commit -m "Bump version to ${{ steps.get_version.outputs.version }}" || echo "No changes to commit"
 
       - name: Install dependencies
