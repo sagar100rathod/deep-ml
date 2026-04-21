@@ -52,6 +52,9 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add pyproject.toml deepml/__init__.py
           git commit -m "Bump version to ${{ steps.get_version.outputs.version }}" || echo "No changes to commit"
+          git push origin HEAD:main || echo "Nothing to push"
+          git tag -f ${{ steps.get_version.outputs.tag }}
+          git push origin ${{ steps.get_version.outputs.tag }} --force
 
       - name: Install dependencies
         run: poetry install --no-interaction --extras dev
