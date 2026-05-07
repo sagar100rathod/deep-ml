@@ -61,6 +61,13 @@ def setup_one_cycle_lr_scheduler_with_warmup(
         1. Warmup: Learning rate increases from initial_lr to max_lr
         2. Annealing: Learning rate decreases from max_lr towards min_lr
         3. The pct_start parameter controls the fraction of total steps for warmup
+
+        ``total_steps`` is set to ``num_epochs * steps_per_epoch + 1`` rather than
+        the "bare" product. PyTorch's ``OneCycleLR.__init__`` calls ``step()`` once
+        internally during construction, consuming one slot before training begins.
+        The trainer then calls ``step()`` once per batch
+        (``num_epochs * steps_per_epoch`` times total). Without the ``+1`` the very
+        last batch would trigger a ``ValueError: Tried to step N+1 times``.
     """
 
     # Validate that exactly one of warmup_steps or warmup_ratio is provided
@@ -68,7 +75,14 @@ def setup_one_cycle_lr_scheduler_with_warmup(
         warmup_ratio is None
     ), "Exactly one of warmup_steps or warmup_ratio must be provided, not both or neither."
 
-    total_steps = num_epochs * steps_per_epoch
+    # +1 accounts for the internal step() call made by OneCycleLR.__init__().
+    # PyTorch's OneCycleLR calls step() once during construction, which consumes
+    # the first slot of total_steps (advancing last_epoch from 0 → 1).
+    # The trainer then calls step() once per batch: num_epochs * steps_per_epoch times.
+    # Without +1: total calls = 1 (init) + num_epochs * steps_per_epoch
+    #           = total_steps + 1  →  ValueError on the final batch.
+    # With +1:  total_steps is sized to fit exactly all calls including the init step.
+    total_steps = num_epochs * steps_per_epoch + 1
 
     if warmup_steps is not None:
         assert (

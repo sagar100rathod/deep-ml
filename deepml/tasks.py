@@ -850,10 +850,16 @@ class Segmentation(NeuralNetTask):
             class_indices = self.transform_output(predictions)
             output_mask = self.decode_segmentation_mask(class_indices)
 
+            x_uint8 = (x * 255.0).to(torch.uint8)
+            target_overlay = blend(x_uint8, target_mask)  # BCHW
+            output_overlay = blend(x_uint8, output_mask)  # BCHW
+
             # BCHW --> #BHWC
             x = x.permute([0, 2, 3, 1])
             target_mask = target_mask.permute([0, 2, 3, 1])
             output_mask = output_mask.permute([0, 2, 3, 1])
+            target_overlay = target_overlay.permute([0, 2, 3, 1])
+            output_overlay = output_overlay.permute([0, 2, 3, 1])
 
             if self.num_classes == 1:
                 target_mask = torch.cat([target_mask, target_mask, target_mask], dim=3)
@@ -861,10 +867,24 @@ class Segmentation(NeuralNetTask):
 
             images = []
             for i in range(x.shape[0]):
-                images.extend([x[i], target_mask[i], output_mask[i]])
+                images.extend(
+                    [
+                        x[i],
+                        target_mask[i],
+                        target_overlay[i],
+                        output_mask[i],
+                        output_overlay[i],
+                    ]
+                )
 
-            image_titles = ["Input", "Target", "Prediction"] * x.shape[0]
-            plot_images(images, image_titles, cols=cols, figsize=figsize, fontsize=12)
+            image_titles = [
+                "Input",
+                "Target Mask",
+                "Target Overlay",
+                "Pred Mask",
+                "Pred Overlay",
+            ] * x.shape[0]
+            plot_images(images, image_titles, cols=5, figsize=figsize, fontsize=12)
 
     def transform_target(self, y: torch.Tensor):
         """Transforms target mask to RGB color image for visualization.

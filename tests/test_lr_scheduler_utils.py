@@ -86,7 +86,7 @@ class TestTotalStepsAndWarmup:
             warmup_steps=10,
             num_epochs=10,
         )
-        expected_total = 10 * 20  # 200
+        expected_total = 10 * 20 + 1  # 201 (+1 buffer to prevent off-by-one ValueError)
         assert scheduler.total_steps == expected_total
 
     def test_warmup_ratio_pct_start(self, model_and_optimizer):
@@ -113,7 +113,7 @@ class TestTotalStepsAndWarmup:
             warmup_steps=5,
             num_epochs=1,
         )
-        assert scheduler.total_steps == 50
+        assert scheduler.total_steps == 51  # 1 * 50 + 1 buffer
 
 
 # ---------------------------------------------------------------------------
@@ -130,8 +130,8 @@ class TestDefaultParameters:
             steps_per_epoch=10,
             warmup_steps=5,
         )
-        # Default num_epochs=50, so total_steps = 50 * 10 = 500
-        assert scheduler.total_steps == 500
+        # Default num_epochs=50, so total_steps = 50 * 10 + 1 = 501
+        assert scheduler.total_steps == 501
 
     def test_default_max_lr(self, model_and_optimizer):
         _, optimizer = model_and_optimizer
@@ -438,8 +438,8 @@ class TestEdgeCases:
             num_epochs=20,
             max_lr=0.01,
         )
-        # total_steps = 20, warmup_ratio = 2/20 = 0.1
-        assert scheduler.total_steps == 20
+        # total_steps = 20 + 1 = 21 (buffer), warmup_ratio = 2/21
+        assert scheduler.total_steps == 21
         scheduler.step()
 
     def test_large_steps_per_epoch(self, model_and_optimizer):
@@ -451,7 +451,7 @@ class TestEdgeCases:
             num_epochs=2,
             max_lr=0.01,
         )
-        assert scheduler.total_steps == 20_000
+        assert scheduler.total_steps == 20_001  # 20_000 + 1 buffer
 
     def test_exceeding_total_steps_raises(self, model_and_optimizer):
         """Stepping beyond total_steps should raise an error from OneCycleLR."""
@@ -463,7 +463,7 @@ class TestEdgeCases:
             num_epochs=2,
             max_lr=0.01,
         )
-        total_steps = 2 * 5
+        total_steps = 2 * 5 + 1  # +1 buffer
         for _ in range(total_steps):
             scheduler.step()
         with pytest.raises(ValueError):
