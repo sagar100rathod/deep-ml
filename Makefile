@@ -15,6 +15,7 @@ test:
 	poetry run pytest tests
 
 check:
+	poetry run autoflake --remove-all-unused-imports --recursive --in-place deepml tests
 	poetry run black deepml tests
 	poetry run isort deepml tests
 	poetry run pre-commit run --all-files

@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from deepml.metrics import classification, commons, segmentation
+from deepml.metrics import classification, commons
 
 
 class TestImageClassificationMetrics(unittest.TestCase):

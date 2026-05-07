@@ -202,7 +202,6 @@ class Task(ABC):
         Returns:
             Transformed target data.
         """
-        pass
 
     @abstractmethod
     def transform_output(self, prediction):
@@ -214,7 +213,6 @@ class Task(ABC):
         Returns:
             Transformed prediction data.
         """
-        pass
 
     @abstractmethod
     def predict_batch(self, x, *args, **kwargs):
@@ -228,7 +226,6 @@ class Task(ABC):
         Returns:
             Model predictions for the batch.
         """
-        pass
 
     @abstractmethod
     def train_step(self, x, y, *args, **kwargs) -> Tuple[Any, Any, Any]:
@@ -243,7 +240,6 @@ class Task(ABC):
         Returns:
             Tuple of (predictions, processed_inputs, processed_targets).
         """
-        pass
 
     @abstractmethod
     def eval_step(self, x, y, *args, **kwargs) -> Tuple[Any, Any, Any]:
@@ -258,7 +254,6 @@ class Task(ABC):
         Returns:
             Tuple of (predictions, processed_inputs, processed_targets).
         """
-        pass
 
     @abstractmethod
     def predict(self, loader):
@@ -270,7 +265,6 @@ class Task(ABC):
         Returns:
             Predictions and targets.
         """
-        pass
 
     @abstractmethod
     def predict_class(self, loader):
@@ -282,7 +276,6 @@ class Task(ABC):
         Returns:
             Predicted classes, probabilities, and targets.
         """
-        pass
 
     @abstractmethod
     def show_predictions(
@@ -304,7 +297,6 @@ class Task(ABC):
             figsize: Figure size tuple.
             target_known: Whether ground truth is available.
         """
-        pass
 
     @abstractmethod
     def write_prediction_to_logger(
@@ -320,7 +312,6 @@ class Task(ABC):
             global_step: Current training step/epoch.
             img_size: Image size for logging.
         """
-        pass
 
     @abstractmethod
     def evaluate(
@@ -341,7 +332,6 @@ class Task(ABC):
         Returns:
             Dictionary of evaluation metrics.
         """
-        pass
 
 
 class NeuralNetTask(Task):
@@ -545,7 +535,6 @@ class NeuralNetTask(Task):
             Default implementation does nothing. Override in subclasses for
             custom logging behavior.
         """
-        pass
 
     @torch.no_grad()
     def evaluate(

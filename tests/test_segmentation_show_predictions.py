@@ -8,11 +8,8 @@ Covers:
   - plot_images is called with 5 titles per sample
 """
 
-from typing import Tuple
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import numpy as np
-import pytest
 import torch
 import torch.nn as nn
 
