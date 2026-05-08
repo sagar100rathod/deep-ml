@@ -120,6 +120,9 @@ class SegmentationMetric(torch.nn.Module, ABC):
 
         output = self.to_class_index(output)
 
+        # Ensure target is on the same device as output (e.g. when output is on GPU)
+        target = target.to(output.device)
+
         if self.mode == "multiclass" and self.ignore_index == 0:
             # to handle class 0 (background) in multiclass segmentation for ignore index
             return get_stats(
