@@ -4,9 +4,8 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-with resources.path("deepml.resources.fonts", "OpenSans-Light.ttf") as font_path:
-    font_resource = str(font_path)
-    FONT = ImageFont.truetype(font_resource, 16)
+font_resource = resources.files("deepml.resources.fonts").joinpath("OpenSans-Light.ttf")
+FONT = ImageFont.truetype(str(font_resource), 16)
 
 
 def create_text_image(text, img_size=(224, 224), text_color="black"):
@@ -37,14 +36,24 @@ def transform_target(target, classes=None):
         if target.ndim == 1:
             target = target.item() if target.shape[0] == 1 else target
 
-        if target.ndim == 0 and classes is None:
+        if isinstance(target, torch.Tensor) and target.ndim == 0 and classes is None:
             return round(target.item(), 2)
 
-        if target.shape[0] == 1 and type(classes) in (list, tuple) and classes:
+        if (
+            isinstance(target, torch.Tensor)
+            and target.shape[0] == 1
+            and type(classes) in (list, tuple)
+            and classes
+        ):
             return classes[target]
 
         # Multi-label
-        if target.shape[0] > 1 and type(classes) in (list, tuple) and classes:
+        if (
+            isinstance(target, torch.Tensor)
+            and target.shape[0] > 1
+            and type(classes) in (list, tuple)
+            and classes
+        ):
             return ",".join(
                 [classes[index] for index, value in enumerate(target) if value]
             )
