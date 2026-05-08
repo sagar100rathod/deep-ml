@@ -547,12 +547,15 @@ class FabricTrainer(BaseLearner):
                 fabric.backward(loss / gradient_accumulation_steps)  # normalize loss
 
             # we gather log loss and metrics at each batch, so no need to sum up running loss during accumulation
-            local_batch_metrics_dict["loss"] = loss
+            local_batch_metrics_dict["loss"] = loss.detach()
             FabricTrainer.update_metrics(outputs, y, metrics, local_batch_metrics_dict)
 
             # collect metric values from all processes using tensor type, avoid dict type
             values = torch.tensor(
-                list(local_batch_metrics_dict.values()),
+                [
+                    v.detach() if isinstance(v, torch.Tensor) else v
+                    for v in local_batch_metrics_dict.values()
+                ],
                 device=fabric.device,
                 dtype=torch.float32,
             )
@@ -681,12 +684,15 @@ class FabricTrainer(BaseLearner):
 
             loss = criterion(outputs, y)
 
-            local_batch_metrics_dict["loss"] = loss
+            local_batch_metrics_dict["loss"] = loss.detach()
             FabricTrainer.update_metrics(outputs, y, metrics, local_batch_metrics_dict)
 
             # collect metric values from all processes using tensor type, avoid dict type
             values = torch.tensor(
-                list(local_batch_metrics_dict.values()),
+                [
+                    v.detach() if isinstance(v, torch.Tensor) else v
+                    for v in local_batch_metrics_dict.values()
+                ],
                 device=fabric.device,
                 dtype=torch.float32,
             )

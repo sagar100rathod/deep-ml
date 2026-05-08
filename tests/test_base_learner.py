@@ -343,6 +343,7 @@ class TestLoadState:
         model = _SimpleModel()
         opt = torch.optim.SGD(model.parameters(), lr=0.01)
         sched = torch.optim.lr_scheduler.StepLR(opt, step_size=1, gamma=0.5)
+        opt.step()
         sched.step()  # last_epoch becomes 1
         saved = {"scheduler_state_dict": sched.state_dict()}
 
@@ -758,6 +759,7 @@ class TestWriteLR:
         model = _SimpleModel()
         opt = torch.optim.SGD(model.parameters(), lr=0.1)
         sched = torch.optim.lr_scheduler.StepLR(opt, step_size=1, gamma=0.5)
+        opt.step()
         sched.step()  # lr -> 0.05
         logger = _DummyLogger()
         history = defaultdict(list)

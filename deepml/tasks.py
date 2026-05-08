@@ -202,7 +202,6 @@ class Task(ABC):
         Returns:
             Transformed target data.
         """
-        pass
 
     @abstractmethod
     def transform_output(self, prediction):
@@ -214,7 +213,6 @@ class Task(ABC):
         Returns:
             Transformed prediction data.
         """
-        pass
 
     @abstractmethod
     def predict_batch(self, x, *args, **kwargs):
@@ -228,7 +226,6 @@ class Task(ABC):
         Returns:
             Model predictions for the batch.
         """
-        pass
 
     @abstractmethod
     def train_step(self, x, y, *args, **kwargs) -> Tuple[Any, Any, Any]:
@@ -243,7 +240,6 @@ class Task(ABC):
         Returns:
             Tuple of (predictions, processed_inputs, processed_targets).
         """
-        pass
 
     @abstractmethod
     def eval_step(self, x, y, *args, **kwargs) -> Tuple[Any, Any, Any]:
@@ -258,7 +254,6 @@ class Task(ABC):
         Returns:
             Tuple of (predictions, processed_inputs, processed_targets).
         """
-        pass
 
     @abstractmethod
     def predict(self, loader):
@@ -270,7 +265,6 @@ class Task(ABC):
         Returns:
             Predictions and targets.
         """
-        pass
 
     @abstractmethod
     def predict_class(self, loader):
@@ -282,7 +276,6 @@ class Task(ABC):
         Returns:
             Predicted classes, probabilities, and targets.
         """
-        pass
 
     @abstractmethod
     def show_predictions(
@@ -304,7 +297,6 @@ class Task(ABC):
             figsize: Figure size tuple.
             target_known: Whether ground truth is available.
         """
-        pass
 
     @abstractmethod
     def write_prediction_to_logger(
@@ -320,7 +312,6 @@ class Task(ABC):
             global_step: Current training step/epoch.
             img_size: Image size for logging.
         """
-        pass
 
     @abstractmethod
     def evaluate(
@@ -341,7 +332,6 @@ class Task(ABC):
         Returns:
             Dictionary of evaluation metrics.
         """
-        pass
 
 
 class NeuralNetTask(Task):
@@ -545,7 +535,6 @@ class NeuralNetTask(Task):
             Default implementation does nothing. Override in subclasses for
             custom logging behavior.
         """
-        pass
 
     @torch.no_grad()
     def evaluate(
@@ -850,10 +839,16 @@ class Segmentation(NeuralNetTask):
             class_indices = self.transform_output(predictions)
             output_mask = self.decode_segmentation_mask(class_indices)
 
+            x_uint8 = (x * 255.0).to(torch.uint8)
+            target_overlay = blend(x_uint8, target_mask)  # BCHW
+            output_overlay = blend(x_uint8, output_mask)  # BCHW
+
             # BCHW --> #BHWC
             x = x.permute([0, 2, 3, 1])
             target_mask = target_mask.permute([0, 2, 3, 1])
             output_mask = output_mask.permute([0, 2, 3, 1])
+            target_overlay = target_overlay.permute([0, 2, 3, 1])
+            output_overlay = output_overlay.permute([0, 2, 3, 1])
 
             if self.num_classes == 1:
                 target_mask = torch.cat([target_mask, target_mask, target_mask], dim=3)
@@ -861,10 +856,24 @@ class Segmentation(NeuralNetTask):
 
             images = []
             for i in range(x.shape[0]):
-                images.extend([x[i], target_mask[i], output_mask[i]])
+                images.extend(
+                    [
+                        x[i],
+                        target_mask[i],
+                        target_overlay[i],
+                        output_mask[i],
+                        output_overlay[i],
+                    ]
+                )
 
-            image_titles = ["Input", "Target", "Prediction"] * x.shape[0]
-            plot_images(images, image_titles, cols=cols, figsize=figsize, fontsize=12)
+            image_titles = [
+                "Input",
+                "Target Mask",
+                "Target Overlay",
+                "Pred Mask",
+                "Pred Overlay",
+            ] * x.shape[0]
+            plot_images(images, image_titles, cols=5, figsize=figsize, fontsize=12)
 
     def transform_target(self, y: torch.Tensor):
         """Transforms target mask to RGB color image for visualization.

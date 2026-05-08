@@ -5,8 +5,6 @@ from typing import Any, Optional
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from deepml import utils
-
 
 class MLExperimentLogger(ABC):
     """Abstract base class for experiment tracking and logging.
@@ -31,7 +29,6 @@ class MLExperimentLogger(ABC):
                 Common parameters include model architecture, optimizer settings,
                 learning rate, batch size, etc.
         """
-        pass
 
     @abstractmethod
     def log_metric(self, tag: str, value: Any, step: int):
@@ -42,7 +39,6 @@ class MLExperimentLogger(ABC):
             value: Numeric value of the metric.
             step: Training step or epoch number for this metric value.
         """
-        pass
 
     @abstractmethod
     def log_artifact(
@@ -57,7 +53,6 @@ class MLExperimentLogger(ABC):
             artifact_path: Optional file path for saving the artifact.
                 Defaults to None.
         """
-        pass
 
     @abstractmethod
     def log_model(
@@ -72,7 +67,6 @@ class MLExperimentLogger(ABC):
             artifact_path: Optional file path to the model checkpoint.
                 Defaults to None.
         """
-        pass
 
     @abstractmethod
     def log_image(
@@ -87,7 +81,6 @@ class MLExperimentLogger(ABC):
             artifact_path: Optional file path for saving the image.
                 Defaults to None.
         """
-        pass
 
 
 class TensorboardLogger(MLExperimentLogger):
@@ -290,7 +283,6 @@ class MLFlowLogger(MLExperimentLogger):
         Note:
             Currently not implemented. Override to add custom artifact logging.
         """
-        pass
 
     def log_model(
         self, tag: str, value: Any, step: int, artifact_path: Optional[str] = None

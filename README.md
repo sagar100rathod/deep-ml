@@ -322,11 +322,11 @@ If you use deep-ml in your research, please cite:
 
 ```bibtex
 @software{deepml2026,
-  author = {Rathod, Sagar},
-  title = {deep-ml: High-level PyTorch Training Framework for Computer Vision},
-  year = {2026},
-  version = {3.0.0},
-  url = {https://github.com/sagar100rathod/deep-ml},
-  doi = {10.5281/zenodo.XXXXXXX}
+  author    = {Sagar Rathod},
+  title     = {deep-ml: A High-Level PyTorch Training Framework for Computer Vision},
+  year      = {2026},
+  publisher = {GitHub},
+  url       = {https://github.com/sagar100rathod/deep-ml},
+  doi       = {10.5281/zenodo.1234567}
 }
 ```

@@ -3,6 +3,7 @@ from typing import Union
 
 import torch
 from segmentation_models_pytorch.metrics.functional import (
+    accuracy,
     f1_score,
     get_stats,
     iou_score,
@@ -12,7 +13,7 @@ from segmentation_models_pytorch.metrics.functional import (
 
 
 class ToClassIndex(torch.nn.Module):
-    def __init__(self, mode: str = "binary", threshold: float = 0.5, activation=None):
+    def __init__(self, mode: str = "binary", threshold: float = None, activation=None):
 
         super(ToClassIndex, self).__init__()
         self.mode = mode
@@ -40,8 +41,9 @@ class ToClassIndex(torch.nn.Module):
 
         if self.mode in ["binary", "multilabel"]:
             probability = self.activation(output)
+            threshold = self.threshold if self.threshold is not None else 0.5
             class_indices = torch.zeros_like(probability)
-            class_indices[probability >= self.threshold] = 1
+            class_indices[probability >= threshold] = 1
         else:
             # Multiclass
             probability = self.activation(output)
@@ -117,6 +119,9 @@ class SegmentationMetric(torch.nn.Module, ABC):
             output, target = self.callable(output, target)
 
         output = self.to_class_index(output)
+
+        # Ensure target is on the same device as output (e.g. when output is on GPU)
+        target = target.to(output.device)
 
         if self.mode == "multiclass" and self.ignore_index == 0:
             # to handle class 0 (background) in multiclass segmentation for ignore index
@@ -343,6 +348,78 @@ class F1Score(SegmentationMetric):
             tn = tn[:, self.target_class_index]
 
         return f1_score(
+            tp=tp,
+            fp=fp,
+            fn=fn,
+            tn=tn,
+            reduction=self.reduction,
+            class_weights=self.class_weights,
+            zero_division=self.zero_division,
+        )
+
+
+class Accuracy(SegmentationMetric):
+    """
+    Computes the accuracy metric for segmentation tasks.
+
+    Args:
+       mode (str): The mode of the metric, either 'binary' or 'multiclass' or 'multilabel'. Default is 'binary'.
+       reduction (str, optional): Define how to aggregate metric between classes and images: 'micro', 'macro', 'weighted', 'micro-imagewise', 'macro-imagewise', 'weighted-imagewise'.
+                                 Default is "macro-imagewise". Reference link: https://smp.readthedocs.io/en/latest/metrics.html
+       activation (torch.nn.Module, optional): An activation function to apply to the output of the model. Default is None.
+       ignore_index (int, optional): Specifies a target value that is ignored and does not contribute to the metric calculation. Default is None.
+       threshold (float, optional): Threshold value for binarizing the output. Default is None.
+       num_classes (int, optional): Number of classes for the metric calculation. Default is None.
+       class_weights (torch.Tensor, optional): A manual rescaling weight given to each class. Default is None.
+       target_class_index (int, optional): The class index for which to compute the accuracy. Default is None.
+       zero_division (float): Value to return when there is a zero division. Default is 1.0.
+       callable (callable, optional): A callable function to apply to the output and target before metric calculation. Default is None.
+    """
+
+    def __init__(
+        self,
+        mode: str = "binary",
+        reduction: str = "macro-imagewise",
+        activation=None,
+        ignore_index=None,
+        threshold=None,
+        num_classes=None,
+        class_weights=None,
+        target_class_index=None,
+        zero_division=1.0,
+        callable=None,
+    ):
+        super(Accuracy, self).__init__(
+            mode=mode,
+            reduction=reduction,
+            activation=activation,
+            ignore_index=ignore_index,
+            threshold=threshold,
+            num_classes=num_classes,
+            class_weights=class_weights,
+            target_class_index=target_class_index,
+            zero_division=zero_division,
+            callable=callable,
+        )
+
+    def forward(
+        self,
+        output: Union[torch.LongTensor, torch.FloatTensor],
+        target: torch.LongTensor,
+    ):
+
+        tp, fp, fn, tn = self._get_stats(output, target)
+
+        # tp shape is [N, C] where N is the batch size and C is the number of classes
+        # for each image in the batch, we have tp, fp, fn, tn for each class
+
+        if self.target_class_index is not None:
+            tp = tp[:, self.target_class_index]
+            fp = fp[:, self.target_class_index]
+            fn = fn[:, self.target_class_index]
+            tn = tn[:, self.target_class_index]
+
+        return accuracy(
             tp=tp,
             fp=fp,
             fn=fn,

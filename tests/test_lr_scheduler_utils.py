@@ -86,7 +86,7 @@ class TestTotalStepsAndWarmup:
             warmup_steps=10,
             num_epochs=10,
         )
-        expected_total = 10 * 20  # 200
+        expected_total = 10 * 20 + 1  # 201 (+1 buffer to prevent off-by-one ValueError)
         assert scheduler.total_steps == expected_total
 
     def test_warmup_ratio_pct_start(self, model_and_optimizer):
@@ -113,7 +113,7 @@ class TestTotalStepsAndWarmup:
             warmup_steps=5,
             num_epochs=1,
         )
-        assert scheduler.total_steps == 50
+        assert scheduler.total_steps == 51  # 1 * 50 + 1 buffer
 
 
 # ---------------------------------------------------------------------------
@@ -130,8 +130,8 @@ class TestDefaultParameters:
             steps_per_epoch=10,
             warmup_steps=5,
         )
-        # Default num_epochs=50, so total_steps = 50 * 10 = 500
-        assert scheduler.total_steps == 500
+        # Default num_epochs=50, so total_steps = 50 * 10 + 1 = 501
+        assert scheduler.total_steps == 501
 
     def test_default_max_lr(self, model_and_optimizer):
         _, optimizer = model_and_optimizer
@@ -145,6 +145,7 @@ class TestDefaultParameters:
         peak_lr = 0.0
         for _ in range(total_steps):
             peak_lr = max(peak_lr, optimizer.param_groups[0]["lr"])
+            optimizer.step()
             scheduler.step()
         assert peak_lr == pytest.approx(1e-3, rel=0.05)
 
@@ -157,6 +158,7 @@ class TestDefaultParameters:
             warmup_steps=5,
         )
         assert isinstance(scheduler, OneCycleLR)
+        optimizer.step()
         scheduler.step()
 
 
@@ -182,6 +184,7 @@ class TestCustomMaxLR:
         peak_lr = 0.0
         for _ in range(total_steps):
             peak_lr = max(peak_lr, optimizer.param_groups[0]["lr"])
+            optimizer.step()
             scheduler.step()
         assert peak_lr == pytest.approx(max_lr, rel=0.05)
 
@@ -201,6 +204,7 @@ class TestCustomMaxLR:
         for _ in range(total_steps):
             current_lr = optimizer.param_groups[0]["lr"]
             peak_lr = max(peak_lr, current_lr)
+            optimizer.step()
             scheduler.step()
 
         assert peak_lr == pytest.approx(max_lr, rel=0.05)
@@ -224,6 +228,7 @@ class TestAnnealStrategy:
         )
         assert isinstance(scheduler, OneCycleLR)
         # Should be able to step without error
+        optimizer.step()
         scheduler.step()
 
     def test_linear_strategy(self, model_and_optimizer):
@@ -236,6 +241,7 @@ class TestAnnealStrategy:
             anneal_strategy="linear",
         )
         assert isinstance(scheduler, OneCycleLR)
+        optimizer.step()
         scheduler.step()
 
     def test_cos_and_linear_produce_different_lr_schedules(self):
@@ -266,6 +272,9 @@ class TestAnnealStrategy:
         for _ in range(100):
             lrs_cos.append(opt1.param_groups[0]["lr"])
             lrs_lin.append(opt2.param_groups[0]["lr"])
+
+            opt1.step()
+            opt2.step()
             sched_cos.step()
             sched_lin.step()
 
@@ -290,6 +299,7 @@ class TestLRProgression:
             max_lr=0.01,
         )
         lr_before = optimizer.param_groups[0]["lr"]
+        optimizer.step()
         scheduler.step()
         lr_after = optimizer.param_groups[0]["lr"]
         assert lr_before != lr_after
@@ -305,6 +315,7 @@ class TestLRProgression:
         )
         lr_start = optimizer.param_groups[0]["lr"]
         for _ in range(20):
+            optimizer.step()
             scheduler.step()
         lr_mid_warmup = optimizer.param_groups[0]["lr"]
         assert lr_mid_warmup > lr_start
@@ -325,6 +336,7 @@ class TestLRProgression:
 
         # Step past warmup to peak
         for _ in range(warmup_steps):
+            optimizer.step()
             scheduler.step()
         lr_at_peak = optimizer.param_groups[0]["lr"]
 
@@ -347,6 +359,7 @@ class TestLRProgression:
             num_epochs=num_epochs,
         )
         for _ in range(total_steps):
+            optimizer.step()
             scheduler.step()
         # Should have completed without error
 
@@ -376,6 +389,7 @@ class TestMultipleParamGroups:
         assert isinstance(scheduler, OneCycleLR)
         # Both param groups should be managed by the scheduler
         assert len(optimizer.param_groups) == 2
+        optimizer.step()
         # Stepping should update LR for both groups
         scheduler.step()
         assert optimizer.param_groups[0]["lr"] > 0
@@ -399,6 +413,7 @@ class TestMultipleParamGroups:
 
         lr0_before = optimizer.param_groups[0]["lr"]
         lr1_before = optimizer.param_groups[1]["lr"]
+        optimizer.step()
         scheduler.step()
         lr0_after = optimizer.param_groups[0]["lr"]
         lr1_after = optimizer.param_groups[1]["lr"]
@@ -438,8 +453,9 @@ class TestEdgeCases:
             num_epochs=20,
             max_lr=0.01,
         )
-        # total_steps = 20, warmup_ratio = 2/20 = 0.1
-        assert scheduler.total_steps == 20
+        # total_steps = 20 + 1 = 21 (buffer), warmup_ratio = 2/21
+        assert scheduler.total_steps == 21
+        optimizer.step()
         scheduler.step()
 
     def test_large_steps_per_epoch(self, model_and_optimizer):
@@ -451,7 +467,7 @@ class TestEdgeCases:
             num_epochs=2,
             max_lr=0.01,
         )
-        assert scheduler.total_steps == 20_000
+        assert scheduler.total_steps == 20_001  # 20_000 + 1 buffer
 
     def test_exceeding_total_steps_raises(self, model_and_optimizer):
         """Stepping beyond total_steps should raise an error from OneCycleLR."""
@@ -463,8 +479,9 @@ class TestEdgeCases:
             num_epochs=2,
             max_lr=0.01,
         )
-        total_steps = 2 * 5
+        total_steps = 2 * 5 + 1  # +1 buffer
         for _ in range(total_steps):
+            optimizer.step()
             scheduler.step()
         with pytest.raises(ValueError):
             scheduler.step()

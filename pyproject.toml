@@ -64,3 +64,8 @@ skip-string-normalization = false
 [tool.isort]
 profile = "black"
 line_length = 88
+
+[dependency-groups]
+dev = [
+    "autoflake (>=2.3.3,<3.0.0)"
+]

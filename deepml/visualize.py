@@ -90,7 +90,6 @@ def plot_images_with_title(
         ax.title.set_fontsize(fontsize)
         ax.imshow(image)
 
-    plt.show()
     plt.tight_layout()
 
 
@@ -139,7 +138,7 @@ def plot_images_with_bboxes(
     plt.figure(figsize=figsize)
     rows = int(np.ceil(samples / cols))
 
-    cmap_obj = mpl.cm.get_cmap(cmap)
+    cmap_obj = plt.get_cmap(cmap)
     cmap_n = getattr(cmap_obj, "N", 10)
 
     def _get_color_for_class(key):
@@ -201,7 +200,6 @@ def plot_images_with_bboxes(
                     verticalalignment="bottom",
                     bbox=dict(facecolor=color, alpha=0.8, pad=0.2, edgecolor="none"),
                 )
-    plt.show()
     plt.tight_layout()
 
 
