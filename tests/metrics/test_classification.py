@@ -2,6 +2,7 @@ import unittest
 
 import torch
 
+from deepml.metrics import classification, commons
 from deepml.metrics.classification import (
     MCC,
     Accuracy,
@@ -150,13 +151,6 @@ class TestMCC(unittest.TestCase):
         target = torch.tensor([0.0, 1.0, 0.0, 1.0])
         result = mcc(output, target).item()
         self.assertAlmostEqual(result, 1.0, delta=1e-4)
-
-
-import unittest
-
-import torch
-
-from deepml.metrics import classification, commons
 
 
 class TestImageClassificationMetrics(unittest.TestCase):
