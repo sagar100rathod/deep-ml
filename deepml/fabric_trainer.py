@@ -560,10 +560,10 @@ class FabricTrainer(BaseLearner):
                 dtype=torch.float32,
             )
 
-            # all_gather is used to aggregate the value across processes
-            all_batch_metrics = fabric.all_gather(
-                values
-            )  # returns tensor of shape (world_size, num_metrics)
+            # all_reduce averages metric values across all ranks — each rank calls this
+            # symmetrically every iteration so there is no rank-count mismatch deadlock
+            # (unlike all_gather which requires identical iteration counts across ranks)
+            reduced_values = fabric.all_reduce(values, reduce_op="mean")
 
             # update progress bar for each batch
             # Aggregate metrics across all processes
@@ -572,20 +572,14 @@ class FabricTrainer(BaseLearner):
 
                 step = step + 1
 
-                all_batch_metrics = all_batch_metrics.view(
-                    fabric.world_size, len(local_batch_metrics_dict)
-                )
-
-                # Convert all_batch_metrics to dict with metric names
-                all_batch_metrics = {
-                    name: all_batch_metrics[
-                        :, i
-                    ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                # Convert reduced tensor back to dict and update simple moving average
+                reduced_batch_metrics = {
+                    name: reduced_values[i]
                     for i, name in enumerate(local_batch_metrics_dict.keys())
                 }
 
                 FabricTrainer.update_metrics_with_simple_moving_average(
-                    all_batch_metrics, global_metrics_dict, step
+                    reduced_batch_metrics, global_metrics_dict, step
                 )
                 training_progress_bar.set_postfix(
                     {
@@ -684,7 +678,7 @@ class FabricTrainer(BaseLearner):
 
             loss = criterion(outputs, y)
 
-            local_batch_metrics_dict["loss"] = loss.detach()
+            local_batch_metrics_dict["loss"] = loss.detach()  # loss has to be tensor
             FabricTrainer.update_metrics(outputs, y, metrics, local_batch_metrics_dict)
 
             # collect metric values from all processes using tensor type, avoid dict type
@@ -697,29 +691,24 @@ class FabricTrainer(BaseLearner):
                 dtype=torch.float32,
             )
 
-            # all_gather is used to aggregate the value across processes
-            all_batch_metrics = fabric.all_gather(
-                values
-            )  # returns tensor of shape (world_size, num_metrics)
+            # all_reduce averages metric values across all ranks — each rank calls this
+            # symmetrically every iteration so there is no rank-count mismatch deadlock
+            # (unlike all_gather which requires identical iteration counts across ranks)
+            reduced_values = fabric.all_reduce(values, reduce_op="mean")
 
-            # Aggregate metrics across all processes
+            # Update progress bar and running average only on global zero
             if fabric.is_global_zero:
-                validation_progress_bar.update(1)
                 step = step + 1
+                validation_progress_bar.update(1)
 
-                all_batch_metrics = all_batch_metrics.view(
-                    fabric.world_size, len(local_batch_metrics_dict)
-                )
-
-                # Convert all_batch_metrics to dict with metric names
-                # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
-                all_batch_metrics = {
-                    name: all_batch_metrics[:, i]
+                # Convert reduced tensor back to dict and update simple moving average
+                reduced_batch_metrics = {
+                    name: reduced_values[i]
                     for i, name in enumerate(local_batch_metrics_dict.keys())
                 }
 
                 FabricTrainer.update_metrics_with_simple_moving_average(
-                    all_batch_metrics, global_metrics_dict, step
+                    reduced_batch_metrics, global_metrics_dict, step
                 )
                 validation_progress_bar.set_postfix(
                     {
