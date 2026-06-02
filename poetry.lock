@@ -4908,19 +4908,20 @@ torch = ["packaging", "safetensors[numpy]", "torch (>=1.10)"]
 
 [[package]]
 name = "safety"
-version = "3.7.0"
+version = "3.8.1"
 description = "Scan dependencies for known vulnerabilities and licenses."
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
 markers = "extra == \"dev\""
 files = [
-    {file = "safety-3.7.0-py3-none-any.whl", hash = "sha256:65e71db45eb832e8840e3456333d44c23927423753d5610596a09e909a66d2bf"},
-    {file = "safety-3.7.0.tar.gz", hash = "sha256:daec15a393cafc32b846b7ef93f9c952a1708863e242341ab5bde2e4beabb54e"},
+    {file = "safety-3.8.1-py3-none-any.whl", hash = "sha256:953c1c3c60c873f53a6cc250b2a9c4b38bb6ef45f0625990e43f20bff916c965"},
+    {file = "safety-3.8.1.tar.gz", hash = "sha256:e646123b976bbb6707cfaacae8c926e2f886b744a60e0f410e8610a3a4eaf7be"},
 ]
 
 [package.dependencies]
 authlib = ">=1.2.0"
+certifi = "*"
 click = ">=8.0.2"
 dparse = ">=0.6.4"
 filelock = ">=3.16.1,<4.0"
@@ -4930,12 +4931,12 @@ marshmallow = ">=3.15.0"
 nltk = ">=3.9"
 packaging = ">=21.0"
 pydantic = ">=2.6.0"
-requests = "*"
 ruamel-yaml = ">=0.17.21"
 safety-schemas = "0.0.16"
 tenacity = ">=8.1.0"
 tomlkit = "*"
-typer = ">=0.16.0"
+truststore = {version = ">=0.10.4", markers = "python_version >= \"3.10\""}
+typer = ">=0.16.0,<0.26.0"
 typing-extensions = ">=4.7.1"
 
 [package.extras]
@@ -5910,6 +5911,19 @@ tests = ["autopep8", "isort", "llnl-hatchet", "numpy", "pytest", "pytest-forked"
 tutorials = ["matplotlib", "pandas", "tabulate"]
 
 [[package]]
+name = "truststore"
+version = "0.10.4"
+description = "Verify certificates using native system trust stores"
+optional = true
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "extra == \"dev\""
+files = [
+    {file = "truststore-0.10.4-py3-none-any.whl", hash = "sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981"},
+    {file = "truststore-0.10.4.tar.gz", hash = "sha256:9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301"},
+]
+
+[[package]]
 name = "twine"
 version = "6.2.0"
 description = "Collection of utilities for publishing packages on PyPI"
@@ -6236,4 +6250,4 @@ dev = ["bandit", "black", "flake8", "isort", "mypy", "myst-parser", "pre-commit"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4"
-content-hash = "1cca6ca813178da277992610676b44a3d83abcedf2dac19cab83d6873075fedb"
+content-hash = "1ce59ed993d7f27de8ef7a7d66d9eabde4093e32de97b965a517259671bdce5e"
