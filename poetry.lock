@@ -2334,14 +2334,14 @@ files = [
 
 [[package]]
 name = "lightning-fabric"
-version = "2.6.4"
+version = "2.6.5"
 description = ""
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "lightning_fabric-2.6.4-py3-none-any.whl", hash = "sha256:6af039be75620dcc5be493dd6c3826c618751c8a512366aabf5fb712e07ffdbb"},
-    {file = "lightning_fabric-2.6.4.tar.gz", hash = "sha256:60b093d0cd925f4c7487e7d5aa23eae06fccf44ae0e5170d6d4ec73a59f075a8"},
+    {file = "lightning_fabric-2.6.5-py3-none-any.whl", hash = "sha256:00168f50a46f1a550f20c787d7bd0264ddeebfd4a7e9343af70c031668f30a12"},
+    {file = "lightning_fabric-2.6.5.tar.gz", hash = "sha256:ab755257d4f928cdd3d25409d25705f1b767952efa2d4e62b5fc2158b1a6d555"},
 ]
 
 [package.dependencies]
@@ -6250,4 +6250,4 @@ dev = ["bandit", "black", "flake8", "isort", "mypy", "myst-parser", "pre-commit"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4"
-content-hash = "1ce59ed993d7f27de8ef7a7d66d9eabde4093e32de97b965a517259671bdce5e"
+content-hash = "439f3104574baf9b99247106ef3bc8891ff90c0e2c86bbacfc0d865885679d33"
