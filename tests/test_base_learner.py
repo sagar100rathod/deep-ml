@@ -59,7 +59,7 @@ import torch
 import torch.nn as nn
 
 from deepml.base import BaseLearner
-from deepml.tasks import Task
+from deepml.tasks import BaseTask
 from deepml.tracking import MLExperimentLogger
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ class _SimpleModel(nn.Module):
         return self.fc(x)
 
 
-class _DummyTask(Task):
+class _DummyBaseTask(BaseTask):
     """Minimal concrete Task so we can instantiate BaseLearner."""
 
     def __init__(self, model, model_dir, **kw):
@@ -171,7 +171,7 @@ def _make_learner(
     lr_scheduler_step_policy="epoch",
 ):
     model = _SimpleModel()
-    task = _DummyTask(model=model, model_dir=str(tmp_path / "model"))
+    task = _DummyBaseTask(model=model, model_dir=str(tmp_path / "model"))
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
     criterion = nn.CrossEntropyLoss()
     learner = ConcreteLearner(
@@ -215,7 +215,7 @@ class TestBaseLearnerInit:
 
     def test_lr_scheduler_and_fn_mutual_exclusion(self, tmp_path):
         model = _SimpleModel()
-        task = _DummyTask(model=model, model_dir=str(tmp_path / "m"))
+        task = _DummyBaseTask(model=model, model_dir=str(tmp_path / "m"))
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
         scheduler_fn = lambda opt: torch.optim.lr_scheduler.StepLR(opt, step_size=1)
@@ -231,7 +231,7 @@ class TestBaseLearnerInit:
 
     def test_lr_scheduler_only(self, tmp_path):
         model = _SimpleModel()
-        task = _DummyTask(model=model, model_dir=str(tmp_path / "m"))
+        task = _DummyBaseTask(model=model, model_dir=str(tmp_path / "m"))
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
 

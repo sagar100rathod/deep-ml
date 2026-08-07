@@ -14,7 +14,7 @@ from deepml.utils import blend, create_text_image, get_random_samples_batch_from
 from deepml.visualize import plot_images, plot_images_with_title
 
 
-class Task(ABC):
+class BaseTask(ABC):
     """Abstract base class for all deep learning tasks.
 
     This class provides the foundation for task-specific implementations including
@@ -55,7 +55,7 @@ class Task(ABC):
                 if device is not one of the valid options.
         """
 
-        super(Task, self).__init__()
+        super(BaseTask, self).__init__()
 
         assert isinstance(
             model, torch.nn.Module
@@ -95,7 +95,9 @@ class Task(ABC):
             self._model.load_state_dict(state_dict["model_state_dict"])
             print("Model Weights Successfully Loaded!")
         else:
-            print("Failed to load model weights..!")
+            print(
+                f"Failed to load model weights! Could not access - {weights_file_path}"
+            )
 
     @property
     def model(self):
@@ -334,8 +336,8 @@ class Task(ABC):
         """
 
 
-class NeuralNetTask(Task):
-    """Base task implementation for general deep learning tasks.
+class Task(BaseTask):
+    """task implementation for general deep learning tasks.
 
     This class provides a simple implementation suitable for any deep learning task.
     It performs predictions without applying task-specific transformations and does
@@ -365,7 +367,7 @@ class NeuralNetTask(Task):
             device: Device to use for computation. Options: "auto", "cpu",
                 "cuda", or "mps". Defaults to "auto".
         """
-        super(NeuralNetTask, self).__init__(
+        super(Task, self).__init__(
             model, model_dir, load_saved_model, model_file_name, device
         )
 
@@ -437,12 +439,16 @@ class NeuralNetTask(Task):
         predictions = []
         targets = []
         with torch.no_grad():
-            for x, y in tqdm(
+            progress_bar = tqdm(
                 loader, total=len(loader), desc="{:12s}".format("Prediction")
-            ):
-                y_pred, x, y = self.eval_step(x, y)
-                predictions.append(y_pred)
-                targets.append(y)
+            )
+            try:
+                for x, y in progress_bar:
+                    y_pred, x, y = self.eval_step(x, y)
+                    predictions.append(y_pred)
+                    targets.append(y)
+            finally:
+                progress_bar.close()
 
         predictions = torch.cat(predictions)
         targets = (
@@ -571,30 +577,31 @@ class NeuralNetTask(Task):
         )
 
         total_samples = 0
-        for batch_index, (x, y) in enumerate(loader):
+        try:
+            for batch_index, (x, y) in enumerate(loader):
 
-            outputs, x, y = self.eval_step(x, y, non_blocking)
+                outputs, x, y = self.eval_step(x, y, non_blocking)
 
-            if isinstance(y, torch.Tensor):
-                y = y.to(self._device)
+                if isinstance(y, torch.Tensor):
+                    y = y.to(self._device)
 
-            if (
-                isinstance(outputs, torch.Tensor)
-                and outputs.ndim == 2
-                and outputs.shape[1] == 1
-            ):
-                y = y.view_as(outputs)
+                if (
+                    isinstance(outputs, torch.Tensor)
+                    and outputs.ndim == 2
+                    and outputs.shape[1] == 1
+                ):
+                    y = y.view_as(outputs)
 
-            batch_size = x.size(0)
-            total_samples += batch_size
+                batch_size = x.size(0)
+                total_samples += batch_size
 
-            for metric_name, metric_instance in metrics.items():
-                metric_value = metric_instance(outputs, y).item()
-                metrics_dict[metric_name] += metric_value * batch_size
+                for metric_name, metric_instance in metrics.items():
+                    metric_value = metric_instance(outputs, y).item()
+                    metrics_dict[metric_name] += metric_value * batch_size
 
-            bar.update(1)
-
-        bar.close()
+                bar.update(1)
+        finally:
+            bar.close()
 
         for metric_name in metrics_dict.keys():
             metrics_dict[metric_name] = metrics_dict[metric_name] / total_samples
@@ -602,7 +609,7 @@ class NeuralNetTask(Task):
         return metrics_dict
 
 
-class Segmentation(NeuralNetTask):
+class Segmentation(Task):
     """Task implementation for binary and multiclass semantic segmentation.
 
     This class handles pixel-level classification tasks including binary and
@@ -765,12 +772,16 @@ class Segmentation(NeuralNetTask):
         self._model = self._model.to(self._device)
         self._model.eval()
         with torch.no_grad():
-            for x, y in tqdm(
+            progress_bar = tqdm(
                 loader, total=len(loader), desc="{:12s}".format("Prediction")
-            ):
-                y_pred, x, y = self.eval_step(x, y)
-                output_mask = self.transform_output(y_pred).cpu()
-                self._save_image_batch(output_mask, y, save_dir)
+            )
+            try:
+                for x, y in progress_bar:
+                    y_pred, x, y = self.eval_step(x, y)
+                    output_mask = self.transform_output(y_pred).cpu()
+                    self._save_image_batch(output_mask, y, save_dir)
+            finally:
+                progress_bar.close()
 
     def _save_image_batch(
         self, class_indices: torch.Tensor, filenames: List[str], save_dir: str
@@ -1111,7 +1122,7 @@ class Segmentation(NeuralNetTask):
             )
 
 
-class ImageRegression(NeuralNetTask):
+class ImageRegression(Task):
     """Task implementation for image regression problems.
 
     This class handles tasks where the model predicts continuous values from
@@ -1293,7 +1304,7 @@ class ImageRegression(NeuralNetTask):
         raise NotImplementedError()
 
 
-class ImageClassification(NeuralNetTask):
+class ImageClassification(Task):
     """Task implementation for image classification.
 
     This class handles both binary and multiclass classification tasks where

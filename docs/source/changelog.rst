@@ -14,6 +14,15 @@ Version 0.3.0 (Upcoming)
 
 - Fixed assertion logic in ``lr_scheduler_utils.py`` for warmup validation
 - Fixed gradient clipping synchronization in ``AcceleratorTrainer``
+- Fixed off-by-one in ``FabricTrainer`` gradient accumulation. The optimizer
+  stepped when ``batch_index % gradient_accumulation_steps == 0``, so it fired
+  on the *first* micro-batch of every epoch (applying a gradient scaled by
+  ``1 / gradient_accumulation_steps``) and produced one to two extra steps per
+  epoch. Schedulers using ``lr_scheduler_step_policy="step"`` and sized from
+  ``steps_per_epoch`` therefore overran ``total_steps`` and raised
+  ``ValueError`` late in long runs. The count is now exactly
+  ``ceil(num_batches / gradient_accumulation_steps)``, matching ``Learner``.
+  See :ref:`steps-per-epoch` for how to size a schedule correctly.
 
 **Improvements:**
 

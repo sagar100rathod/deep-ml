@@ -99,6 +99,11 @@ How do I implement gradient accumulation?
        gradient_accumulation_steps=4  # Effective batch = 4 * batch_size
    )
 
+The trainer then performs ``ceil(num_batches / gradient_accumulation_steps)``
+optimizer steps per epoch instead of one per batch. If you also use a
+step-policy scheduler, size it from that number rather than
+``len(train_loader)`` — see :ref:`steps-per-epoch`.
+
 My training is slow. How can I speed it up?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

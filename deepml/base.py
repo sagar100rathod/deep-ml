@@ -5,14 +5,14 @@ from typing import Callable, Dict, Optional, Tuple, Union
 
 import torch
 
-from deepml.tasks import Task
+from deepml.tasks import BaseTask
 from deepml.tracking import MLExperimentLogger
 
 
 class BaseLearner(abc.ABC):
     def __init__(
         self,
-        task: Task,
+        task: BaseTask,
         optimizer: torch.optim.Optimizer,
         criterion: torch.nn.Module,
         lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
@@ -22,7 +22,7 @@ class BaseLearner(abc.ABC):
         lr_scheduler_step_policy: str = "epoch",
     ):
 
-        assert isinstance(task, Task)
+        assert isinstance(task, BaseTask)
         assert (lr_scheduler is None) or (
             lr_scheduler_fn is None
         ), "Either lr_scheduler or lr_scheduler_fn can be provided, not both."

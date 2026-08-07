@@ -213,6 +213,42 @@ Use OneCycleLR with warmup:
        lr_scheduler_fn=lambda opt: lr_scheduler
    )
 
+.. _steps-per-epoch:
+
+Sizing ``steps_per_epoch``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``steps_per_epoch`` means *optimizer* steps, not batches. ``len(train_loader)``
+is only correct with a single process and no gradient accumulation, as above.
+
+Two things shrink the count. Gradient accumulation means the trainer steps once
+per ``gradient_accumulation_steps`` batches, and distributed training shards the
+loader across ranks — but only once ``fit()`` calls
+``fabric.setup_dataloaders()``, which happens *after* you build the scheduler.
+So ``len(train_loader)`` at scheduler-construction time is still the full,
+un-sharded length and you have to account for both yourself:
+
+.. code-block:: python
+
+   import math
+
+   batches_per_rank = math.ceil(len(train_loader) / num_processes)
+   steps_per_epoch = math.ceil(batches_per_rank / gradient_accumulation_steps)
+
+Use ceiling division at both levels, and prefer over-estimating. The trainer
+performs ``ceil(batches_per_rank / gradient_accumulation_steps)`` steps per
+epoch; ``OneCycleLR`` is built with
+``total_steps = num_epochs * steps_per_epoch + 1`` and raises ``ValueError`` the
+moment the trainer steps past it. An over-estimate merely stops the cycle short
+of its final minimum LR — an under-estimate aborts the run, typically in the
+last few epochs when the damage is most expensive.
+
+.. warning::
+
+   With ``lr_scheduler_step_policy="epoch"`` this does not apply — the scheduler
+   steps once per epoch and ``steps_per_epoch`` only affects schedules that
+   compute a total step budget.
+
 Experiment Tracking
 -------------------
 
