@@ -7,7 +7,7 @@ from lightning_fabric import Fabric
 from tqdm import tqdm
 
 from deepml.base import BaseLearner
-from deepml.tasks import Task
+from deepml.tasks import BaseTask
 from deepml.tracking import MLExperimentLogger, TensorboardLogger
 
 
@@ -25,7 +25,7 @@ class FabricTrainer(BaseLearner):
 
     def __init__(
         self,
-        task: Task,
+        task: BaseTask,
         optimizer: torch.optim.Optimizer,
         criterion: torch.nn.Module,
         lr_scheduler_fn: Optional[
@@ -525,98 +525,101 @@ class FabricTrainer(BaseLearner):
         # Nullify the parameter gradients
         optimizer.zero_grad(set_to_none=True)
 
-        for batch_index, (x, y) in enumerate(train_loader):
+        try:
+            for batch_index, (x, y) in enumerate(train_loader):
 
-            is_accumulating = batch_index % gradient_accumulation_steps != 0
-            is_last_batch = (batch_index + 1) == len(train_loader)
+                is_accumulating = (batch_index + 1) % gradient_accumulation_steps != 0
+                is_last_batch = (batch_index + 1) == len(train_loader)
 
-            # If we are accumulating gradients, we do not need to step the optimizer
-            with fabric.no_backward_sync(model, enabled=is_accumulating):
-                outputs, x, y = self._task.train_step(
-                    x, y, model=model, device=fabric.device, non_blocking=non_blocking
+                # If we are accumulating gradients, we do not need to step the optimizer
+                with fabric.no_backward_sync(model, enabled=is_accumulating):
+                    outputs, x, y = self._task.train_step(
+                        x,
+                        y,
+                        model=model,
+                        device=fabric.device,
+                        non_blocking=non_blocking,
+                    )
+
+                    if (
+                        isinstance(outputs, torch.Tensor)
+                        and outputs.ndim == 2
+                        and outputs.shape[1] == 1
+                    ):
+                        y = y.view_as(outputs)
+
+                    loss = criterion(outputs, y)
+                    fabric.backward(
+                        loss / gradient_accumulation_steps
+                    )  # normalize loss
+
+                # we gather log loss and metrics at each batch, so no need to sum up running loss during accumulation
+                local_batch_metrics_dict["loss"] = loss.detach()
+                FabricTrainer.update_metrics(
+                    outputs, y, metrics, local_batch_metrics_dict
                 )
 
-                if (
-                    isinstance(outputs, torch.Tensor)
-                    and outputs.ndim == 2
-                    and outputs.shape[1] == 1
-                ):
-                    y = y.view_as(outputs)
-
-                loss = criterion(outputs, y)
-                fabric.backward(loss / gradient_accumulation_steps)  # normalize loss
-
-            # we gather log loss and metrics at each batch, so no need to sum up running loss during accumulation
-            local_batch_metrics_dict["loss"] = loss.detach()
-            FabricTrainer.update_metrics(outputs, y, metrics, local_batch_metrics_dict)
-
-            # collect metric values from all processes using tensor type, avoid dict type
-            values = torch.tensor(
-                [
-                    v.detach() if isinstance(v, torch.Tensor) else v
-                    for v in local_batch_metrics_dict.values()
-                ],
-                device=fabric.device,
-                dtype=torch.float32,
-            )
-
-            # all_gather is used to aggregate the value across processes
-            all_batch_metrics = fabric.all_gather(
-                values
-            )  # returns tensor of shape (world_size, num_metrics)
-
-            # update progress bar for each batch
-            # Aggregate metrics across all processes
-            if fabric.is_global_zero:
-                training_progress_bar.update(1)
-
-                step = step + 1
-
-                all_batch_metrics = all_batch_metrics.view(
-                    fabric.world_size, len(local_batch_metrics_dict)
+                # collect metric values from all processes using tensor type, avoid dict type
+                values = torch.tensor(
+                    [
+                        v.detach() if isinstance(v, torch.Tensor) else v
+                        for v in local_batch_metrics_dict.values()
+                    ],
+                    device=fabric.device,
+                    dtype=torch.float32,
                 )
 
-                # Convert all_batch_metrics to dict with metric names
-                all_batch_metrics = {
-                    name: all_batch_metrics[
-                        :, i
-                    ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
-                    for i, name in enumerate(local_batch_metrics_dict.keys())
-                }
+                # all_reduce averages metric values across all ranks — each rank calls this
+                # symmetrically every iteration so there is no rank-count mismatch deadlock
+                # (unlike all_gather which requires identical iteration counts across ranks)
+                reduced_values = fabric.all_reduce(values, reduce_op="mean")
 
-                FabricTrainer.update_metrics_with_simple_moving_average(
-                    all_batch_metrics, global_metrics_dict, step
-                )
-                training_progress_bar.set_postfix(
-                    {
-                        name: f"{round(value, 4)}"
-                        for name, value in global_metrics_dict.items()
+                # update progress bar for each batch
+                # Aggregate metrics across all processes
+                if fabric.is_global_zero:
+                    training_progress_bar.update(1)
+
+                    step = step + 1
+
+                    # Convert reduced tensor back to dict and update simple moving average
+                    reduced_batch_metrics = {
+                        name: reduced_values[i]
+                        for i, name in enumerate(local_batch_metrics_dict.keys())
                     }
-                )
 
-            # If we are not accumulating gradients, we step the optimizer
-            if not is_accumulating or is_last_batch:
-
-                # Gradient clipping
-                if gradient_clip_value is not None:
-                    fabric.clip_gradients(
-                        model, optimizer, clip_val=gradient_clip_value
+                    FabricTrainer.update_metrics_with_simple_moving_average(
+                        reduced_batch_metrics, global_metrics_dict, step
                     )
-                elif gradient_clip_max_norm is not None:
-                    fabric.clip_gradients(
-                        model, optimizer, max_norm=gradient_clip_max_norm
+                    training_progress_bar.set_postfix(
+                        {
+                            name: f"{round(value, 4)}"
+                            for name, value in global_metrics_dict.items()
+                        }
                     )
 
-                optimizer.step()
+                # If we are not accumulating gradients, we step the optimizer
+                if not is_accumulating or is_last_batch:
 
-                if step_lr_scheduler is not None:
-                    step_lr_scheduler.step()
+                    # Gradient clipping
+                    if gradient_clip_value is not None:
+                        fabric.clip_gradients(
+                            model, optimizer, clip_val=gradient_clip_value
+                        )
+                    elif gradient_clip_max_norm is not None:
+                        fabric.clip_gradients(
+                            model, optimizer, max_norm=gradient_clip_max_norm
+                        )
 
-                # Nullify the parameter gradients
-                optimizer.zero_grad(set_to_none=True)
+                    optimizer.step()
 
-        if fabric.is_global_zero:
-            training_progress_bar.close()
+                    if step_lr_scheduler is not None:
+                        step_lr_scheduler.step()
+
+                    # Nullify the parameter gradients
+                    optimizer.zero_grad(set_to_none=True)
+        finally:
+            if fabric.is_global_zero:
+                training_progress_bar.close()
 
         return global_metrics_dict
 
@@ -666,70 +669,70 @@ class FabricTrainer(BaseLearner):
                 leave=True,
             )
 
-        for batch_index, (x, y) in enumerate(loader):
+        try:
+            for batch_index, (x, y) in enumerate(loader):
 
-            outputs, x, y = self._task.eval_step(
-                x, y, model=model, device=fabric.device, non_blocking=non_blocking
-            )
-
-            if isinstance(y, torch.Tensor):
-                y = y.to(fabric.device)
-
-            if (
-                isinstance(outputs, torch.Tensor)
-                and outputs.ndim == 2
-                and outputs.shape[1] == 1
-            ):
-                y = y.view_as(outputs)
-
-            loss = criterion(outputs, y)
-
-            local_batch_metrics_dict["loss"] = loss.detach()
-            FabricTrainer.update_metrics(outputs, y, metrics, local_batch_metrics_dict)
-
-            # collect metric values from all processes using tensor type, avoid dict type
-            values = torch.tensor(
-                [
-                    v.detach() if isinstance(v, torch.Tensor) else v
-                    for v in local_batch_metrics_dict.values()
-                ],
-                device=fabric.device,
-                dtype=torch.float32,
-            )
-
-            # all_gather is used to aggregate the value across processes
-            all_batch_metrics = fabric.all_gather(
-                values
-            )  # returns tensor of shape (world_size, num_metrics)
-
-            # Aggregate metrics across all processes
-            if fabric.is_global_zero:
-                validation_progress_bar.update(1)
-                step = step + 1
-
-                all_batch_metrics = all_batch_metrics.view(
-                    fabric.world_size, len(local_batch_metrics_dict)
+                outputs, x, y = self._task.eval_step(
+                    x, y, model=model, device=fabric.device, non_blocking=non_blocking
                 )
 
-                # Convert all_batch_metrics to dict with metric names
-                # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
-                all_batch_metrics = {
-                    name: all_batch_metrics[:, i]
-                    for i, name in enumerate(local_batch_metrics_dict.keys())
-                }
+                if isinstance(y, torch.Tensor):
+                    y = y.to(fabric.device)
 
-                FabricTrainer.update_metrics_with_simple_moving_average(
-                    all_batch_metrics, global_metrics_dict, step
+                if (
+                    isinstance(outputs, torch.Tensor)
+                    and outputs.ndim == 2
+                    and outputs.shape[1] == 1
+                ):
+                    y = y.view_as(outputs)
+
+                loss = criterion(outputs, y)
+
+                local_batch_metrics_dict["loss"] = (
+                    loss.detach()
+                )  # loss has to be tensor
+                FabricTrainer.update_metrics(
+                    outputs, y, metrics, local_batch_metrics_dict
                 )
-                validation_progress_bar.set_postfix(
-                    {
-                        name: f"{round(value, 4)}"
-                        for name, value in global_metrics_dict.items()
+
+                # collect metric values from all processes using tensor type, avoid dict type
+                values = torch.tensor(
+                    [
+                        v.detach() if isinstance(v, torch.Tensor) else v
+                        for v in local_batch_metrics_dict.values()
+                    ],
+                    device=fabric.device,
+                    dtype=torch.float32,
+                )
+
+                # all_reduce averages metric values across all ranks — each rank calls this
+                # symmetrically every iteration so there is no rank-count mismatch deadlock
+                # (unlike all_gather which requires identical iteration counts across ranks)
+                reduced_values = fabric.all_reduce(values, reduce_op="mean")
+
+                # Update progress bar and running average only on global zero
+                if fabric.is_global_zero:
+                    step = step + 1
+                    validation_progress_bar.update(1)
+
+                    # Convert reduced tensor back to dict and update simple moving average
+                    reduced_batch_metrics = {
+                        name: reduced_values[i]
+                        for i, name in enumerate(local_batch_metrics_dict.keys())
                     }
-                )
 
-        if fabric.is_global_zero:
-            validation_progress_bar.close()
+                    FabricTrainer.update_metrics_with_simple_moving_average(
+                        reduced_batch_metrics, global_metrics_dict, step
+                    )
+                    validation_progress_bar.set_postfix(
+                        {
+                            name: f"{round(value, 4)}"
+                            for name, value in global_metrics_dict.items()
+                        }
+                    )
+        finally:
+            if fabric.is_global_zero:
+                validation_progress_bar.close()
 
         return global_metrics_dict
 

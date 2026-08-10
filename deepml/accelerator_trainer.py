@@ -7,7 +7,7 @@ from accelerate import Accelerator
 from tqdm import tqdm
 
 from deepml.base import BaseLearner
-from deepml.tasks import Task
+from deepml.tasks import BaseTask
 from deepml.tracking import MLExperimentLogger, TensorboardLogger
 
 
@@ -22,7 +22,7 @@ class AcceleratorTrainer(BaseLearner):
 
     def __init__(
         self,
-        task: Task,
+        task: BaseTask,
         optimizer: torch.optim.Optimizer,
         criterion: torch.nn.Module,
         lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
@@ -141,97 +141,99 @@ class AcceleratorTrainer(BaseLearner):
         # Nullify the parameter gradients
         optimizer.zero_grad(set_to_none=True)
 
-        for batch_index, (x, y) in enumerate(train_loader):
+        try:
+            for batch_index, (x, y) in enumerate(train_loader):
 
-            with self.accelerator.accumulate(model):
+                with self.accelerator.accumulate(model):
 
-                outputs, x, y = self._task.train_step(
-                    x,
-                    y,
-                    model=model,
-                    device=self.accelerator.device,
-                    non_blocking=non_blocking,
-                )
-
-                if (
-                    isinstance(outputs, torch.Tensor)
-                    and outputs.ndim == 2
-                    and outputs.shape[1] == 1
-                ):
-                    y = y.view_as(outputs)
-
-                loss = criterion(outputs, y)
-                self.accelerator.backward(
-                    loss
-                )  # no need to scale loss manually, accelerator takes care of it
-
-                # Gradient clipping
-                if self.accelerator.sync_gradients:
-                    if gradient_clip_value is not None:
-                        self.accelerator.clip_grad_value_(
-                            model.parameters(), gradient_clip_value
-                        )
-                    elif gradient_clip_max_norm is not None:
-                        self.accelerator.clip_grad_norm_(
-                            model.parameters(), max_norm=gradient_clip_max_norm
-                        )
-
-                optimizer.step()
-
-                if step_lr_scheduler is not None:
-                    step_lr_scheduler.step()
-
-                # Nullify the parameter gradients
-                optimizer.zero_grad(set_to_none=True)
-
-                local_batch_metrics_dict["loss"] = loss
-                AcceleratorTrainer.update_metrics(
-                    outputs, y, metrics, local_batch_metrics_dict
-                )
-
-                # collect metric values from all processes using tensor type, avoid dict type
-                values = torch.tensor(
-                    list(local_batch_metrics_dict.values()),
-                    device=self.accelerator.device,
-                    dtype=torch.float32,
-                )
-
-                # all_gather is used to aggregate the value across processes
-                all_batch_metrics = self.accelerator.gather(
-                    values
-                )  # returns tensor of shape (world_size, num_metrics)
-
-                # Aggregate metrics across all processes
-                if self.accelerator.is_main_process:
-
-                    training_progress_bar.update(1)
-
-                    step = step + 1
-
-                    all_batch_metrics = all_batch_metrics.view(
-                        self.accelerator.num_processes, len(local_batch_metrics_dict)
+                    outputs, x, y = self._task.train_step(
+                        x,
+                        y,
+                        model=model,
+                        device=self.accelerator.device,
+                        non_blocking=non_blocking,
                     )
 
-                    # Convert all_batch_metrics to dict with metric names
-                    all_batch_metrics = {
-                        name: all_batch_metrics[
-                            :, i
-                        ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
-                        for i, name in enumerate(local_batch_metrics_dict.keys())
-                    }
+                    if (
+                        isinstance(outputs, torch.Tensor)
+                        and outputs.ndim == 2
+                        and outputs.shape[1] == 1
+                    ):
+                        y = y.view_as(outputs)
 
-                    AcceleratorTrainer.update_metrics_with_simple_moving_average(
-                        all_batch_metrics, global_metrics_dict, step
+                    loss = criterion(outputs, y)
+                    self.accelerator.backward(
+                        loss
+                    )  # no need to scale loss manually, accelerator takes care of it
+
+                    # Gradient clipping
+                    if self.accelerator.sync_gradients:
+                        if gradient_clip_value is not None:
+                            self.accelerator.clip_grad_value_(
+                                model.parameters(), gradient_clip_value
+                            )
+                        elif gradient_clip_max_norm is not None:
+                            self.accelerator.clip_grad_norm_(
+                                model.parameters(), max_norm=gradient_clip_max_norm
+                            )
+
+                    optimizer.step()
+
+                    if step_lr_scheduler is not None:
+                        step_lr_scheduler.step()
+
+                    # Nullify the parameter gradients
+                    optimizer.zero_grad(set_to_none=True)
+
+                    local_batch_metrics_dict["loss"] = loss
+                    AcceleratorTrainer.update_metrics(
+                        outputs, y, metrics, local_batch_metrics_dict
                     )
-                    training_progress_bar.set_postfix(
-                        {
-                            name: f"{round(value, 4)}"
-                            for name, value in global_metrics_dict.items()
+
+                    # collect metric values from all processes using tensor type, avoid dict type
+                    values = torch.tensor(
+                        list(local_batch_metrics_dict.values()),
+                        device=self.accelerator.device,
+                        dtype=torch.float32,
+                    )
+
+                    # all_gather is used to aggregate the value across processes
+                    all_batch_metrics = self.accelerator.gather(
+                        values
+                    )  # returns tensor of shape (world_size, num_metrics)
+
+                    # Aggregate metrics across all processes
+                    if self.accelerator.is_main_process:
+
+                        training_progress_bar.update(1)
+
+                        step = step + 1
+
+                        all_batch_metrics = all_batch_metrics.view(
+                            self.accelerator.num_processes,
+                            len(local_batch_metrics_dict),
+                        )
+
+                        # Convert all_batch_metrics to dict with metric names
+                        all_batch_metrics = {
+                            name: all_batch_metrics[
+                                :, i
+                            ]  # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                            for i, name in enumerate(local_batch_metrics_dict.keys())
                         }
-                    )
 
-        if self.accelerator.is_main_process:
-            training_progress_bar.close()
+                        AcceleratorTrainer.update_metrics_with_simple_moving_average(
+                            all_batch_metrics, global_metrics_dict, step
+                        )
+                        training_progress_bar.set_postfix(
+                            {
+                                name: f"{round(value, 4)}"
+                                for name, value in global_metrics_dict.items()
+                            }
+                        )
+        finally:
+            if self.accelerator.is_main_process:
+                training_progress_bar.close()
 
         return global_metrics_dict
 
@@ -537,73 +539,74 @@ class AcceleratorTrainer(BaseLearner):
                 leave=True,
             )
 
-        for batch_index, (x, y) in enumerate(loader):
+        try:
+            for batch_index, (x, y) in enumerate(loader):
 
-            outputs, x, y = self._task.eval_step(
-                x,
-                y,
-                model=model,
-                device=self.accelerator.device,
-                non_blocking=non_blocking,
-            )
-
-            if isinstance(y, torch.Tensor):
-                y = y.to(self.accelerator.device)
-
-            if (
-                isinstance(outputs, torch.Tensor)
-                and outputs.ndim == 2
-                and outputs.shape[1] == 1
-            ):
-                y = y.view_as(outputs)
-
-            loss = criterion(outputs, y)
-
-            local_batch_metrics_dict["loss"] = loss
-            AcceleratorTrainer.update_metrics(
-                outputs, y, metrics, local_batch_metrics_dict
-            )
-
-            # collect metric values from all processes using tensor type, avoid dict type
-            values = torch.tensor(
-                list(local_batch_metrics_dict.values()),
-                device=self.accelerator.device,
-                dtype=torch.float32,
-            )
-
-            # used to aggregate the value across processes
-            all_batch_metrics = self.accelerator.gather(
-                values
-            )  # returns tensor of shape (world_size, num_metrics)
-
-            # Aggregate metrics across all processes
-            if self.accelerator.is_main_process:
-                validation_progress_bar.update(1)
-                step = step + 1
-
-                all_batch_metrics = all_batch_metrics.view(
-                    self.accelerator.num_processes, len(local_batch_metrics_dict)
+                outputs, x, y = self._task.eval_step(
+                    x,
+                    y,
+                    model=model,
+                    device=self.accelerator.device,
+                    non_blocking=non_blocking,
                 )
 
-                # Convert all_batch_metrics to dict with metric names
-                # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
-                all_batch_metrics = {
-                    name: all_batch_metrics[:, i]
-                    for i, name in enumerate(local_batch_metrics_dict.keys())
-                }
+                if isinstance(y, torch.Tensor):
+                    y = y.to(self.accelerator.device)
 
-                AcceleratorTrainer.update_metrics_with_simple_moving_average(
-                    all_batch_metrics, global_metrics_dict, step
+                if (
+                    isinstance(outputs, torch.Tensor)
+                    and outputs.ndim == 2
+                    and outputs.shape[1] == 1
+                ):
+                    y = y.view_as(outputs)
+
+                loss = criterion(outputs, y)
+
+                local_batch_metrics_dict["loss"] = loss
+                AcceleratorTrainer.update_metrics(
+                    outputs, y, metrics, local_batch_metrics_dict
                 )
-                validation_progress_bar.set_postfix(
-                    {
-                        name: f"{round(value, 4)}"
-                        for name, value in global_metrics_dict.items()
+
+                # collect metric values from all processes using tensor type, avoid dict type
+                values = torch.tensor(
+                    list(local_batch_metrics_dict.values()),
+                    device=self.accelerator.device,
+                    dtype=torch.float32,
+                )
+
+                # used to aggregate the value across processes
+                all_batch_metrics = self.accelerator.gather(
+                    values
+                )  # returns tensor of shape (world_size, num_metrics)
+
+                # Aggregate metrics across all processes
+                if self.accelerator.is_main_process:
+                    validation_progress_bar.update(1)
+                    step = step + 1
+
+                    all_batch_metrics = all_batch_metrics.view(
+                        self.accelerator.num_processes, len(local_batch_metrics_dict)
+                    )
+
+                    # Convert all_batch_metrics to dict with metric names
+                    # all_batch_metrics[:, 0] -> loss, all_batch_metrics[:, 1] -> acc, etc.
+                    all_batch_metrics = {
+                        name: all_batch_metrics[:, i]
+                        for i, name in enumerate(local_batch_metrics_dict.keys())
                     }
-                )
 
-        if self.accelerator.is_main_process:
-            validation_progress_bar.close()
+                    AcceleratorTrainer.update_metrics_with_simple_moving_average(
+                        all_batch_metrics, global_metrics_dict, step
+                    )
+                    validation_progress_bar.set_postfix(
+                        {
+                            name: f"{round(value, 4)}"
+                            for name, value in global_metrics_dict.items()
+                        }
+                    )
+        finally:
+            if self.accelerator.is_main_process:
+                validation_progress_bar.close()
 
         return global_metrics_dict
 
@@ -659,34 +662,38 @@ class AcceleratorTrainer(BaseLearner):
                 print(f"Epoch {epoch + 1}")
                 pbar = tqdm(train_loader, desc="Training", dynamic_ncols=True)
 
-            for batch in train_loader:
-                inputs, targets = batch
-                outputs = model(inputs)
-                loss = self.criterion(outputs, targets)
-                self.accelerator.backward(loss)
-                optimizer.step()
-                optimizer.zero_grad()
+            try:
+                for batch in train_loader:
+                    inputs, targets = batch
+                    outputs = model(inputs)
+                    loss = self.criterion(outputs, targets)
+                    self.accelerator.backward(loss)
+                    optimizer.step()
+                    optimizer.zero_grad()
 
-                # Gather metrics across devices
-                local_metrics = {"loss": loss.detach()}
-                for name, metric_fn in metrics.items():
-                    local_metrics[name] = metric_fn(outputs, targets)
+                    # Gather metrics across devices
+                    local_metrics = {"loss": loss.detach()}
+                    for name, metric_fn in metrics.items():
+                        local_metrics[name] = metric_fn(outputs, targets)
 
-                gathered = self.accelerator.gather_for_metrics(local_metrics)
+                    gathered = self.accelerator.gather_for_metrics(local_metrics)
 
+                    if self.accelerator.is_main_process:
+                        step += 1
+                        for k, v in gathered.items():
+                            global_metrics[k] += (
+                                v.mean().item() - global_metrics[k]
+                            ) / step
+                        pbar.set_postfix(
+                            {
+                                f"train_{k}": round(v, 4)
+                                for k, v in global_metrics.items()
+                            }
+                        )
+                        pbar.update()
+            finally:
                 if self.accelerator.is_main_process:
-                    step += 1
-                    for k, v in gathered.items():
-                        global_metrics[k] += (
-                            v.mean().item() - global_metrics[k]
-                        ) / step
-                    pbar.set_postfix(
-                        {f"train_{k}": round(v, 4) for k, v in global_metrics.items()}
-                    )
-                    pbar.update()
-
-            if self.accelerator.is_main_process:
-                pbar.close()
+                    pbar.close()
 
             # Validation loop
             model.eval()
@@ -696,28 +703,36 @@ class AcceleratorTrainer(BaseLearner):
                 pbar = tqdm(val_loader, desc="Validation", dynamic_ncols=True)
 
             with torch.no_grad():
-                for batch in val_loader:
-                    inputs, targets = batch
-                    outputs = model(inputs)
-                    loss = self.criterion(outputs, targets)
+                try:
+                    for batch in val_loader:
+                        inputs, targets = batch
+                        outputs = model(inputs)
+                        loss = self.criterion(outputs, targets)
 
-                    local_metrics = {"loss": loss}
-                    for name, metric_fn in metrics.items():
-                        local_metrics[name] = metric_fn(outputs, targets)
+                        local_metrics = {"loss": loss}
+                        for name, metric_fn in metrics.items():
+                            local_metrics[name] = metric_fn(outputs, targets)
 
-                    gathered = self.accelerator.gather_for_metrics(local_metrics)
+                        gathered = self.accelerator.gather_for_metrics(local_metrics)
 
+                        if self.accelerator.is_main_process:
+                            step += 1
+                            for k, v in gathered.items():
+                                val_metrics[k] += (
+                                    v.mean().item() - val_metrics[k]
+                                ) / step
+                            pbar.set_postfix(
+                                {
+                                    f"val_{k}": round(v, 4)
+                                    for k, v in val_metrics.items()
+                                }
+                            )
+                            pbar.update()
+                finally:
                     if self.accelerator.is_main_process:
-                        step += 1
-                        for k, v in gathered.items():
-                            val_metrics[k] += (v.mean().item() - val_metrics[k]) / step
-                        pbar.set_postfix(
-                            {f"val_{k}": round(v, 4) for k, v in val_metrics.items()}
-                        )
-                        pbar.update()
+                        pbar.close()
 
             if self.accelerator.is_main_process:
-                pbar.close()
                 print("-" * 40)
 
         # Save model if needed

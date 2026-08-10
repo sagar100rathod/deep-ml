@@ -8,7 +8,7 @@ import torch
 from tqdm import tqdm
 
 import deepml.tasks
-from deepml.tasks import Task
+from deepml.tasks import BaseTask
 from deepml.tracking import MLExperimentLogger, TensorboardLogger
 
 MAC_TORCH_2_2_2 = "2.2.2"
@@ -41,7 +41,7 @@ class Learner:
 
     def __init__(
         self,
-        task: Task,
+        task: BaseTask,
         optimizer: torch.optim.Optimizer,
         criterion: torch.nn.Module,
         lr_scheduler=None,
@@ -65,7 +65,7 @@ class Learner:
             use_amp: Whether to use automatic mixed precision (AMP) for training.
                 Defaults to False.
         """
-        assert isinstance(task, Task)
+        assert isinstance(task, BaseTask)
 
         self.__predictor = task
         self.__model = self.__predictor.model
@@ -318,8 +318,8 @@ class Learner:
 
         return self.__metrics_dict
 
-    def set_predictor(self, predictor: deepml.tasks.Task):
-        assert isinstance(predictor, Task)
+    def set_predictor(self, predictor: deepml.tasks.BaseTask):
+        assert isinstance(predictor, BaseTask)
         self.__predictor = predictor
 
     def __init_metrics(self, metrics: Dict[str, torch.nn.Module]):
@@ -724,16 +724,24 @@ class Learner:
         with torch.no_grad():
             for iteration in range(iterations):
                 print("Iteration:", iteration + 1)
-                for x, y in tqdm(loader, total=len(loader), desc="Feature Extraction"):
+                progress_bar = tqdm(
+                    loader, total=len(loader), desc="Feature Extraction"
+                )
+                try:
+                    for x, y in progress_bar:
 
-                    feature_set, x, y = self.__predictor.eval_step(x, y).cpu().numpy()
+                        feature_set, x, y = (
+                            self.__predictor.eval_step(x, y).cpu().numpy()
+                        )
 
-                    if target_known:
-                        y = y.numpy().reshape(-1, 1)
-                        feature_set = np.hstack([y, feature_set])
+                        if target_known:
+                            y = y.numpy().reshape(-1, 1)
+                            feature_set = np.hstack([y, feature_set])
 
-                    csv_writer.writerows(feature_set)
-                    fp.flush()
+                        csv_writer.writerows(feature_set)
+                        fp.flush()
+                finally:
+                    progress_bar.close()
         fp.close()
 
     def show_predictions(

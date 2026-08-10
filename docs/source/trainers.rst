@@ -239,6 +239,17 @@ Simulate larger batch sizes:
        gradient_accumulation_steps=8  # Effective batch size = 8 * batch_size
    )
 
+Gradients are accumulated over ``gradient_accumulation_steps`` batches and the
+loss is normalised by that factor, so the optimizer runs
+``ceil(num_batches / gradient_accumulation_steps)`` times per epoch. A trailing
+partial window is still applied on the last batch rather than discarded.
+
+.. note::
+
+   This changes how many times a ``lr_scheduler_step_policy="step"`` scheduler
+   advances per epoch. Size such schedules from the optimizer-step count, not
+   from ``len(train_loader)`` — see :ref:`steps-per-epoch`.
+
 Gradient Clipping
 ~~~~~~~~~~~~~~~~~
 
