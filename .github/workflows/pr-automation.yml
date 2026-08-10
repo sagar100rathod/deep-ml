@@ -50,6 +50,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: PR Title Validation
+        # Dependabot writes its own titles ("deps(deps): bump x from 1 to 2") and no
+        # author can correct them, so the uppercase-subject rule below is unsatisfiable
+        # for its PRs. Skip the check when dependabot opened the PR; the job itself still
+        # runs and reports success, so this stays usable as a required status check.
+        # Keyed on the PR author rather than github.actor, which would become the
+        # maintainer on an "edited" event and fail the check again.
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
         uses: amannn/action-semantic-pull-request@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -66,6 +73,7 @@ jobs:
             ci
             chore
             revert
+            deps
           requireScope: false
           subjectPattern: ^[A-Z].+$
           subjectPatternError: |
