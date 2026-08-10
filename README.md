@@ -230,6 +230,22 @@ trainer = FabricTrainer(
 )
 ```
 
+`steps_per_epoch` counts *optimizer* steps, so `len(train_loader)` is only
+correct for a single process with no gradient accumulation. Accumulation
+reduces the count, and Fabric shards the loader inside `fit()` — after the
+scheduler is built — so account for both yourself:
+
+```python
+import math
+
+batches_per_rank = math.ceil(len(train_loader) / num_processes)
+steps_per_epoch = math.ceil(batches_per_rank / gradient_accumulation_steps)
+```
+
+Use ceiling division and prefer over-estimating: too large only stops the cycle
+short of its final min LR, while too small makes `OneCycleLR` raise
+`ValueError` once the trainer steps past `total_steps`.
+
 ### Experiment Tracking
 
 ```python

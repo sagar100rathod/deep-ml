@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 
 from deepml.fabric_trainer import FabricTrainer
-from deepml.tasks import Task
+from deepml.tasks import BaseTask
 from deepml.tracking import MLExperimentLogger
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ class SimpleModel(nn.Module):
         return self.fc(self.flatten(x))
 
 
-class DummyTask(Task):
+class DummyBaseTask(BaseTask):
     """Concrete Task subclass that performs minimal work."""
 
     def __init__(self, model, model_dir, **kwargs):
@@ -148,7 +148,7 @@ def _make_dataset(n_samples=32, channels=3, h=8, w=8, n_classes=2):
 def _make_trainer(tmp_path, lr_scheduler_fn=None, lr_scheduler_step_policy="epoch"):
     """Build a FabricTrainer wired to a DummyTask + SimpleModel using CPU."""
     model = SimpleModel(in_features=3 * 8 * 8, out_features=2)
-    task = DummyTask(model=model, model_dir=str(tmp_path / "model"))
+    task = DummyBaseTask(model=model, model_dir=str(tmp_path / "model"))
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
     criterion = nn.CrossEntropyLoss()
     trainer = FabricTrainer(
@@ -201,7 +201,7 @@ class TestFabricTrainerInit:
 
     def test_invalid_optimizer_raises(self, tmp_path):
         model = SimpleModel()
-        task = DummyTask(model=model, model_dir=str(tmp_path / "m"))
+        task = DummyBaseTask(model=model, model_dir=str(tmp_path / "m"))
         with pytest.raises(AssertionError):
             FabricTrainer(
                 task=task,
@@ -213,7 +213,7 @@ class TestFabricTrainerInit:
 
     def test_invalid_criterion_raises(self, tmp_path):
         model = SimpleModel()
-        task = DummyTask(model=model, model_dir=str(tmp_path / "m"))
+        task = DummyBaseTask(model=model, model_dir=str(tmp_path / "m"))
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         with pytest.raises(AssertionError):
             FabricTrainer(
@@ -226,7 +226,7 @@ class TestFabricTrainerInit:
 
     def test_invalid_lr_scheduler_step_policy_raises(self, tmp_path):
         model = SimpleModel()
-        task = DummyTask(model=model, model_dir=str(tmp_path / "m"))
+        task = DummyBaseTask(model=model, model_dir=str(tmp_path / "m"))
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
         with pytest.raises(AssertionError):
             FabricTrainer(
@@ -431,6 +431,53 @@ class TestGradientOptions:
             logger=logger,
         )
         assert trainer.epochs_completed == 1
+
+    @pytest.mark.parametrize(
+        "n_train, batch_size, accumulation_steps, expected_steps",
+        [
+            (80, 8, 4, 3),  # 10 batches -> ceil(10 / 4)
+            (64, 8, 4, 2),  # 8 batches, evenly divisible -> ceil(8 / 4)
+            (72, 8, 3, 3),  # 9 batches -> ceil(9 / 3)
+            (80, 8, 1, 10),  # no accumulation -> one step per batch
+        ],
+    )
+    def test_optimizer_steps_per_epoch(
+        self, tmp_path, n_train, batch_size, accumulation_steps, expected_steps
+    ):
+        """Steps per epoch must equal ceil(num_batches / accumulation_steps).
+
+        Callers size their LR schedule from this count (e.g. OneCycleLR's
+        total_steps), so an off-by-one here silently overruns the schedule and
+        raises ValueError near the end of a long run.
+        """
+        created = []
+
+        def lr_scheduler_fn(optimizer):
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
+            created.append(scheduler)
+            return scheduler
+
+        trainer = _make_trainer(
+            tmp_path,
+            lr_scheduler_fn=lr_scheduler_fn,
+            lr_scheduler_step_policy="step",
+        )
+        train_loader, val_loader = _make_loaders(
+            batch_size=batch_size, n_train=n_train, n_val=batch_size
+        )
+
+        trainer.fit(
+            train_loader,
+            val_loader=val_loader,
+            epochs=1,
+            gradient_accumulation_steps=accumulation_steps,
+            save_model_after_every_epoch=1,
+            logger=DummyLogger(),
+        )
+
+        # LambdaLR.__init__ steps once (last_epoch: -1 -> 0), so last_epoch is
+        # exactly the number of trainer-driven steps.
+        assert created[0].last_epoch == expected_steps
 
     def test_gradient_accumulation_zero_raises(self, tmp_path):
         trainer = _make_trainer(tmp_path)

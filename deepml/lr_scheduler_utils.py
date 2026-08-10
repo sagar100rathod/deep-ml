@@ -22,8 +22,19 @@ def setup_one_cycle_lr_scheduler_with_warmup(
         optimizer: PyTorch optimizer instance to schedule.
         steps_per_epoch: Number of optimizer steps in one epoch. Typically
             ``len(train_loader)``. When using gradient accumulation or distributed
-            training, adjust accordingly:
-            ``len(train_loader) // gradient_accumulation_steps // num_processes``.
+            training, adjust accordingly. The trainer performs
+            ``ceil(batches_per_rank / gradient_accumulation_steps)`` steps per
+            epoch, so compute it with ceiling division on a loader whose length
+            has not yet been sharded by Fabric::
+
+                batches_per_rank = math.ceil(len(train_loader) / num_processes)
+                steps_per_epoch = math.ceil(
+                    batches_per_rank / gradient_accumulation_steps
+                )
+
+            Prefer over-estimating: too large only means the cycle stops short
+            of its final min LR, while too small raises ``ValueError`` once the
+            trainer steps past ``total_steps``.
         warmup_steps: Number of warmup steps before reaching max_lr. Must be less
             than total training steps. Mutually exclusive with warmup_ratio.
             Defaults to None.
