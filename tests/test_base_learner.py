@@ -673,6 +673,42 @@ class TestSMA:
         BaseLearner.update_metrics_with_simple_moving_average(source, target, step=1)
         assert target["loss"] == pytest.approx(3.0)
 
+    def test_stateful_metric_uses_last_value_not_sma(self):
+        """Regression: validate loop must pass metrics_instance_dict so stateful metrics
+        are not double-averaged (bug: missing 4th arg caused SMA on cumulative values).
+        """
+        from deepml.metrics.segmentation import IoUScore
+
+        metric = IoUScore(mode="binary")
+        metrics = {"iou": metric}
+
+        # Two val-batch calls with non-uniform epoch-cumulative values
+        target_buggy = OrderedDict({"iou": 0.0})  # simulates the bug (no metrics arg)
+        target_fixed = OrderedDict(
+            {"iou": 0.0}
+        )  # simulates the fix (metrics arg passed)
+
+        source1 = {"iou": torch.tensor(0.9)}
+        BaseLearner.update_metrics_with_simple_moving_average(
+            source1, target_buggy, step=1
+        )
+        BaseLearner.update_metrics_with_simple_moving_average(
+            source1, target_fixed, step=1, metrics_instance_dict=metrics
+        )
+
+        source2 = {"iou": torch.tensor(0.5)}
+        BaseLearner.update_metrics_with_simple_moving_average(
+            source2, target_buggy, step=2
+        )
+        BaseLearner.update_metrics_with_simple_moving_average(
+            source2, target_fixed, step=2, metrics_instance_dict=metrics
+        )
+
+        # Bug: SMA of [0.9, 0.5] = 0.7 — wrong (already epoch-cumulative)
+        assert target_buggy["iou"] == pytest.approx(0.7, abs=0.01)
+        # Fix: last epoch-cumulative value = 0.5 — correct
+        assert target_fixed["iou"] == pytest.approx(0.5, abs=0.01)
+
 
 # ===================================================================
 # write_metrics_to_logger

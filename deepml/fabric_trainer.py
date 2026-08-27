@@ -755,7 +755,7 @@ class FabricTrainer(BaseLearner):
                     }
 
                     FabricTrainer.update_metrics_with_simple_moving_average(
-                        reduced_batch_metrics, global_metrics_dict, step
+                        reduced_batch_metrics, global_metrics_dict, step, metrics
                     )
                     validation_progress_bar.set_postfix(
                         {
