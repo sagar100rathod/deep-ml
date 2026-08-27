@@ -326,10 +326,12 @@ class Learner:
         if metrics is None:
             return
 
-        for metric_name, _ in metrics.items():
+        for metric_name, metric_instance in metrics.items():
             if metric_name == "loss":
                 raise ValueError("Metric name 'loss' is reserved of criterion")
             self.__metrics_dict[metric_name] = 0
+            if getattr(metric_instance, "is_stateful", False):
+                metric_instance.reset()
 
     def __update_metrics(
         self,
@@ -344,13 +346,13 @@ class Learner:
 
         with torch.no_grad():
             for metric_name, metric_instance in metrics.items():
-                self.__metrics_dict[metric_name] = self.__metrics_dict[metric_name] + (
-                    (
-                        metric_instance(outputs, targets).item()
-                        - self.__metrics_dict[metric_name]
-                    )
-                    / step
-                )
+                value = metric_instance(outputs, targets).item()
+                if getattr(metric_instance, "is_stateful", False):
+                    self.__metrics_dict[metric_name] = value
+                else:
+                    self.__metrics_dict[metric_name] = self.__metrics_dict[
+                        metric_name
+                    ] + ((value - self.__metrics_dict[metric_name]) / step)
 
     def __write_metrics_to_logger(self, tag: str, global_step: int):
         for name, value in self.__metrics_dict.items():
@@ -400,8 +402,8 @@ class Learner:
             steps_per_epoch: Number of steps per epoch. Should be around len(train_loader)
                 to ensure full dataset coverage. If None, defaults to len(train_loader).
                 Defaults to None.
-            save_model_after_every_epoch: Frequency (in epochs) to save model checkpoints.
-                Defaults to 5.
+            save_model_after_every_epoch: Frequency (in epochs) to save epoch-level
+                model checkpoints. Checkpoint name: ``epoch_{N}_model.pt``. Defaults to 5.
             metrics: Dictionary mapping metric names to metric instances. Each metric
                 must be a torch.nn.Module with a forward() method. Defaults to None.
             gradient_accumulation_steps: Number of steps to accumulate gradients before
@@ -448,6 +450,11 @@ class Learner:
 
         self.__model.to(self.__device)
         self.__criterion = self.__criterion.to(self.__device)
+
+        if metrics:
+            for m in metrics.values():
+                if getattr(m, "is_stateful", False):
+                    m.to(self.__device)
 
         # initialize the logger if not provided
         if self.logger is None:

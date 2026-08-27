@@ -70,6 +70,7 @@ autodoc_mock_imports = [
     "mlflow",
     "wandb",
     "rasterio",
+    "torchmetrics",
 ]
 
 # Intersphinx mapping

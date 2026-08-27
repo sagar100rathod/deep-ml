@@ -71,7 +71,8 @@ Training Method
        val_loader=val_loader,
        epochs=50,
        save_model_after_every_epoch=10,
-       metrics={'accuracy': Accuracy()},
+       steps_per_epoch=None,             # None = full DataLoader per epoch
+       metrics={'accuracy': Accuracy(num_classes=10)},
        gradient_accumulation_steps=4,
        gradient_clip_value=1.0,          # Clip by value
        gradient_clip_max_norm=None,      # Clip by norm
@@ -83,6 +84,12 @@ Training Method
        image_inverse_transform=denormalize,
        logger_img_size=224
    )
+
+.. note::
+
+   Built-in deepml metrics (``IoUScore``, ``Accuracy``, etc.) are automatically
+   moved to the training device (CUDA, MPS) at the start of ``fit()``.
+   No manual ``.to(device)`` call is needed.
 
 Advanced: Multi-Node Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -250,6 +257,26 @@ partial window is still applied on the last batch rather than discarded.
    advances per epoch. Size such schedules from the optimizer-step count, not
    from ``len(train_loader)`` — see :ref:`steps-per-epoch`.
 
+Steps Per Epoch
+~~~~~~~~~~~~~~~
+
+Limit training to N batches per "epoch". Required for streaming / IterableDatasets
+(no ``__len__``); also useful for defining a synthetic epoch over very large
+fixed datasets:
+
+.. code-block:: python
+
+   trainer.fit(
+       train_loader=stream_loader,
+       val_loader=val_loader,
+       epochs=100,
+       steps_per_epoch=1000   # validation and checkpointing every 1 000 batches
+   )
+
+``steps_per_epoch`` is supported in all three trainers. For fixed-size datasets
+it must not exceed ``len(train_loader)``. When not set (default ``None``), the
+full DataLoader is consumed each epoch.
+
 Gradient Clipping
 ~~~~~~~~~~~~~~~~~
 
@@ -320,3 +347,19 @@ Checkpoint Management
    # - best_val_model.pt (best validation loss)
    # - epoch_10_model.pt, epoch_20_model.pt, ...
    # - latest_model.pt (most recent)
+
+Step-Based Checkpointing
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+To save checkpoints at step (batch) granularity and also run validation at that
+interval, combine ``steps_per_epoch`` with ``save_model_after_every_epoch=1``:
+
+.. code-block:: python
+
+   trainer.fit(
+       ...,
+       steps_per_epoch=500,
+       save_model_after_every_epoch=1   # checkpoint + validation every 500 batches
+   )
+
+   # Checkpoints: epoch_1_model.pt (after 500 batches), epoch_2_model.pt (after 1 000), …

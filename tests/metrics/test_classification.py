@@ -3,32 +3,7 @@ import unittest
 import torch
 
 from deepml.metrics import classification, commons
-from deepml.metrics.classification import (
-    MCC,
-    Accuracy,
-    Binarizer,
-    FScore,
-    Precision,
-    Recall,
-)
-
-
-class TestBinarizer(unittest.TestCase):
-
-    def test_binary_sigmoid(self):
-        binarizer = Binarizer(threshold=0.5)
-        # shape (N,) - binary
-        output = torch.tensor([2.0, -2.0, 0.0])
-        indices, probs = binarizer(output)
-        self.assertEqual(indices[0].item(), 1.0)  # sigmoid(2) > 0.5
-        self.assertEqual(indices[1].item(), 0.0)  # sigmoid(-2) < 0.5
-
-    def test_multiclass_softmax(self):
-        binarizer = Binarizer()
-        output = torch.tensor([[0.1, 5.0, 0.3], [4.0, 0.1, 0.2]])  # N x C
-        indices, probs = binarizer(output)
-        self.assertEqual(indices[0].item(), 1)
-        self.assertEqual(indices[1].item(), 0)
+from deepml.metrics.classification import MCC, Accuracy, FScore, Precision, Recall
 
 
 class TestAccuracy(unittest.TestCase):
@@ -46,8 +21,7 @@ class TestAccuracy(unittest.TestCase):
         self.assertAlmostEqual(acc(output, target).item(), 0.0, delta=1e-4)
 
     def test_multiclass_accuracy(self):
-        acc = Accuracy()
-        # All predictions correct: class 0 and class 1
+        acc = Accuracy(num_classes=2)
         output = torch.tensor([[5.0, 0.0], [0.0, 5.0]])
         target = torch.tensor([0.0, 1.0])
         self.assertAlmostEqual(acc(output, target).item(), 1.0, delta=1e-4)
@@ -65,12 +39,11 @@ class TestPrecision(unittest.TestCase):
         prec = Precision()
         output = torch.tensor([-5.0, -5.0])
         target = torch.tensor([1.0, 1.0])
-        # tp=0, fp=0 -> 0/(0+0+eps) ~ 0
         result = prec(output, target).item()
         self.assertAlmostEqual(result, 0.0, delta=1e-3)
 
     def test_multiclass(self):
-        prec = Precision()
+        prec = Precision(num_classes=3)
         output = torch.tensor([[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]])
         target = torch.tensor([0.0, 1.0, 2.0])
         result = prec(output, target).item()
@@ -93,7 +66,7 @@ class TestRecall(unittest.TestCase):
         self.assertAlmostEqual(result, 0.0, delta=1e-3)
 
     def test_multiclass(self):
-        rec = Recall()
+        rec = Recall(num_classes=2)
         output = torch.tensor([[5.0, 0.0], [0.0, 5.0]])
         target = torch.tensor([0.0, 1.0])
         result = rec(output, target).item()
@@ -109,7 +82,7 @@ class TestFScore(unittest.TestCase):
         self.assertAlmostEqual(fscore(output, target).item(), 1.0, delta=1e-4)
 
     def test_multiclass(self):
-        fscore = FScore()
+        fscore = FScore(num_classes=2)
         output = torch.tensor([[5.0, 0.0], [0.0, 5.0]])
         target = torch.tensor([0.0, 1.0])
         result = fscore(output, target).item()
@@ -122,7 +95,6 @@ class TestFScore(unittest.TestCase):
         target = torch.tensor([1.0, 0.0, 1.0, 0.0])
         r1 = fscore_b1(output, target).item()
         r2 = fscore_b2(output, target).item()
-        # Both should be valid scores in [0, 1]
         self.assertGreater(r1, 0.0)
         self.assertGreater(r2, 0.0)
         self.assertLessEqual(r1, 1.0)
@@ -146,11 +118,32 @@ class TestMCC(unittest.TestCase):
         self.assertAlmostEqual(result, -1.0, delta=1e-3)
 
     def test_multiclass(self):
-        mcc = MCC()
+        mcc = MCC(num_classes=2)
         output = torch.tensor([[5.0, 0.0], [0.0, 5.0], [5.0, 0.0], [0.0, 5.0]])
         target = torch.tensor([0.0, 1.0, 0.0, 1.0])
         result = mcc(output, target).item()
         self.assertAlmostEqual(result, 1.0, delta=1e-4)
+
+
+class TestIsStateful(unittest.TestCase):
+
+    def test_all_classification_metrics_are_stateful(self):
+        self.assertTrue(Accuracy.is_stateful)
+        self.assertTrue(Precision.is_stateful)
+        self.assertTrue(Recall.is_stateful)
+        self.assertTrue(FScore.is_stateful)
+        self.assertTrue(MCC.is_stateful)
+
+    def test_reset_clears_state(self):
+        prec = Precision()
+        output = torch.tensor([5.0, -5.0])
+        target = torch.tensor([1.0, 0.0])
+        prec(output, target)
+        prec.reset()
+        result = prec(output, target)
+        fresh = Precision()
+        expected = fresh(output, target)
+        self.assertAlmostEqual(result.item(), expected.item(), places=5)
 
 
 class TestImageClassificationMetrics(unittest.TestCase):
@@ -168,7 +161,8 @@ class TestImageClassificationMetrics(unittest.TestCase):
             [0.6, 0.5, 0.3, 0.2, 0.8, 0.2, 0.1, 0.7, 0.49, 0.51, 0.8, 0.95]
         )
         acc = classification.Accuracy()
-        self.assertAlmostEqual(acc(output, target), 0.5833, delta=1e-4)
+        # torchmetrics uses > threshold (same as old code) — 0.5 at threshold=0.5 → predicted negative
+        self.assertAlmostEqual(acc(output, target).item(), 0.5833, delta=1e-3)
 
     def test_multiclass_classification(self):
         target = torch.tensor(

@@ -83,7 +83,8 @@ class AcceleratorTrainer(BaseLearner):
         non_blocking: bool = True,
         gradient_clip_value: Optional[float] = None,
         gradient_clip_max_norm: Optional[float] = None,
-    ) -> OrderedDict[str, float]:
+        steps_per_epoch: Optional[int] = None,
+    ):
         """Runs a single training epoch with Accelerate-managed gradient accumulation.
 
         Executes one complete pass through the training data with distributed training
@@ -130,8 +131,13 @@ class AcceleratorTrainer(BaseLearner):
             # Global metrics dict for tracking metrics from all processes,
             # separate history is used to track metrics across multiple calls to fit method
             global_metrics_dict = AcceleratorTrainer.init_metrics(metrics)
+            _tqdm_total = (
+                steps_per_epoch
+                if steps_per_epoch is not None
+                else (len(train_loader) if hasattr(train_loader, "__len__") else None)
+            )
             training_progress_bar = tqdm(
-                total=len(train_loader),
+                total=_tqdm_total,
                 desc="{:12s}".format("Training"),
                 dynamic_ncols=True,
             )
@@ -223,7 +229,7 @@ class AcceleratorTrainer(BaseLearner):
                         }
 
                         AcceleratorTrainer.update_metrics_with_simple_moving_average(
-                            all_batch_metrics, global_metrics_dict, step
+                            all_batch_metrics, global_metrics_dict, step, metrics
                         )
                         training_progress_bar.set_postfix(
                             {
@@ -231,6 +237,9 @@ class AcceleratorTrainer(BaseLearner):
                                 for name, value in global_metrics_dict.items()
                             }
                         )
+
+                if steps_per_epoch is not None and batch_index + 1 >= steps_per_epoch:
+                    break
         finally:
             if self.accelerator.is_main_process:
                 training_progress_bar.close()
@@ -243,6 +252,7 @@ class AcceleratorTrainer(BaseLearner):
         val_loader: torch.utils.data.DataLoader = None,
         epochs: int = 10,
         save_model_after_every_epoch: int = 5,
+        steps_per_epoch: Optional[int] = None,
         metrics: Dict[str, torch.nn.Module] = None,
         gradient_clip_value: Optional[float] = None,
         gradient_clip_max_norm: Optional[float] = None,
@@ -263,8 +273,11 @@ class AcceleratorTrainer(BaseLearner):
             train_loader: DataLoader for training data.
             val_loader: DataLoader for validation data. Defaults to None.
             epochs: Total number of epochs to train. Defaults to 10.
-            save_model_after_every_epoch: Frequency (in epochs) to save model checkpoints.
-                Defaults to 5.
+            save_model_after_every_epoch: Frequency (in epochs) to save epoch-level
+                model checkpoints. Checkpoint name: ``epoch_{N}_model.pt``. Defaults to 5.
+            steps_per_epoch: Number of batches per epoch. Use with streaming /
+                IterableDatasets (no fixed length) or to define a synthetic epoch over
+                very large datasets. Defaults to None (full DataLoader per epoch).
             metrics: Dictionary mapping metric names to metric instances. Each metric
                 must be a torch.nn.Module with a forward() method. Defaults to None.
             gradient_clip_value: Maximum absolute value for gradient clipping. Gradients
@@ -306,6 +319,11 @@ class AcceleratorTrainer(BaseLearner):
             raise ValueError(
                 "Only one of gradient_clip_value or gradient_clip_max_norm should be passed."
             )
+
+        if steps_per_epoch is not None and hasattr(train_loader, "__len__"):
+            assert steps_per_epoch <= len(
+                train_loader
+            ), "steps_per_epoch must not exceed len(train_loader)"
 
             # Check valid metrics types
         if metrics:
@@ -356,6 +374,11 @@ class AcceleratorTrainer(BaseLearner):
             )
         )
 
+        if metrics:
+            for m in metrics.values():
+                if getattr(m, "is_stateful", False):
+                    m.to(self.accelerator.device)
+
         if self.accelerator.is_main_process:
             self.logger = (
                 logger if logger is not None else TensorboardLogger(self._model_dir)
@@ -403,6 +426,7 @@ class AcceleratorTrainer(BaseLearner):
                 non_blocking=non_blocking,
                 gradient_clip_value=gradient_clip_value,
                 gradient_clip_max_norm=gradient_clip_max_norm,
+                steps_per_epoch=steps_per_epoch,
             )
 
             # evaluation
