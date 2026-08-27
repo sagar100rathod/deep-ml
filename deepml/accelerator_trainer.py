@@ -620,7 +620,7 @@ class AcceleratorTrainer(BaseLearner):
                     }
 
                     AcceleratorTrainer.update_metrics_with_simple_moving_average(
-                        all_batch_metrics, global_metrics_dict, step
+                        all_batch_metrics, global_metrics_dict, step, metrics
                     )
                     validation_progress_bar.set_postfix(
                         {

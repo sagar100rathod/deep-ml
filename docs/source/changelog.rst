@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Version 3.3.1
+-------------
+
+**Bug Fixes:**
+
+- Fixed validation metrics being double-averaged in ``FabricTrainer`` and
+  ``AcceleratorTrainer``. ``__validate`` was calling
+  ``update_metrics_with_simple_moving_average`` without the
+  ``metrics_instance_dict`` argument, causing SMA to be applied to
+  epoch-cumulative values — biasing ``val_iou``, ``val_precision``, etc.
+  toward early validation batches. ``loss/val`` and ``trainer.py``
+  (single-device) were unaffected.
+- Fixed ``pyproject.toml`` dependency format: ``"torchmetrics (>=0.11.0)"``
+  normalised to ``"torchmetrics>=0.11.0"`` (PEP 508), resolving
+  ``poetry.lock`` drift in CI.
+
+----
+
 Version 3.3.0
 -------------
 
