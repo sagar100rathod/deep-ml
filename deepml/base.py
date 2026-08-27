@@ -130,10 +130,12 @@ class BaseLearner(abc.ABC):
         if metrics is None:
             return metrics_dict
 
-        for metric_name, _ in metrics.items():
+        for metric_name, metric_instance in metrics.items():
             if metric_name == "loss":
                 raise ValueError("Metric name 'loss' is reserved of criterion")
             metrics_dict[metric_name] = 0.0
+            if getattr(metric_instance, "is_stateful", False):
+                metric_instance.reset()
 
         return metrics_dict
 
@@ -156,12 +158,17 @@ class BaseLearner(abc.ABC):
         source_metrics_dict: Dict[str, torch.nn.Module],
         target_metrics_dict: OrderedDict[str, float],
         step: int,
+        metrics_instance_dict: Dict[str, torch.nn.Module] = None,
     ):
-
         for metric_name, metric_value in source_metrics_dict.items():
-            target_metrics_dict[metric_name] = target_metrics_dict[metric_name] + (
-                metric_value.mean().item() - target_metrics_dict[metric_name]
-            ) / float(step)
+            instance = (metrics_instance_dict or {}).get(metric_name)
+            if getattr(instance, "is_stateful", False):
+                # stateful metrics return the epoch-accumulated value — use directly
+                target_metrics_dict[metric_name] = metric_value.mean().item()
+            else:
+                target_metrics_dict[metric_name] = target_metrics_dict[metric_name] + (
+                    metric_value.mean().item() - target_metrics_dict[metric_name]
+                ) / float(step)
 
     @staticmethod
     def write_metrics_to_logger(

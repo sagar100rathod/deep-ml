@@ -68,7 +68,7 @@ if __name__ == "__main__":
         train_loader,
         val_loader,
         epochs=10,
-        metrics={"acc": Accuracy()},
+        metrics={"acc": Accuracy(num_classes=10)},
         gradient_accumulation_steps=4,
     )
 

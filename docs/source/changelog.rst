@@ -1,6 +1,42 @@
 Changelog
 =========
 
+Version 3.3.0
+-------------
+
+**Breaking Changes:**
+
+- Classification metrics (``Accuracy``, ``Precision``, ``Recall``, ``FScore``,
+  ``MCC``) now require ``num_classes=N`` for multiclass ``(N, C)`` inputs.
+  Without it, binary mode is assumed and a clear ``ValueError`` is raised on 2D input.
+- Classification ``epsilon`` parameter replaced by ``zero_division`` (default ``0.0``).
+- ``Binarizer`` class removed from ``deepml.metrics.classification``.
+- ``deepml.metrics.commons`` removed from the public API (internal utility).
+- Segmentation metric default ``reduction`` changed from ``'macro-imagewise'`` to
+  ``'macro'``. Imagewise variants (``'macro-imagewise'``, ``'micro-imagewise'``,
+  ``'weighted-imagewise'``) are no longer supported.
+- Old segmentation classes ``IoU``, ``DiceCoefficient``, ``PixelAccuracy`` replaced
+  by ``IoUScore``, ``F1Score``, ``Accuracy``.
+
+**New Features:**
+
+- **Stateful metric accumulation**: all built-in metrics now accumulate raw
+  TP/FP/FN/TN counts across the full epoch via torchmetrics and compute the metric
+  value once at epoch end. This fixes the Jensen bias in per-batch SMA averaging —
+  ``mean(per_batch_IoU) ≠ global_IoU``. The progress bar shows the running
+  epoch-to-date value.
+- ``steps_per_epoch`` parameter added to ``FabricTrainer.fit()`` and
+  ``AcceleratorTrainer.fit()``. Supports streaming/IterableDatasets (no ``__len__``)
+  and synthetic epoch boundaries over very large fixed datasets.
+- Stateful metrics are automatically moved to the training device (CUDA/MPS) at the
+  start of ``fit()``. No manual ``.to(device)`` call is needed.
+
+**New Dependency:**
+
+- ``torchmetrics>=0.11.0`` is now a required core dependency.
+
+----
+
 Version 0.3.0 (Upcoming)
 ------------------------
 

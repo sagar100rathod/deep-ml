@@ -101,9 +101,10 @@ if __name__ == "__main__":
         train_loader,
         val_loader,
         epochs=NUM_EPOCHS,
-        metrics={"acc": Accuracy()},
+        metrics={"acc": Accuracy(num_classes=10)},
         gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
         logger=MLFlowLogger(),
+        steps_per_epoch=200,
     )
 
     if learner.fabric.is_global_zero:

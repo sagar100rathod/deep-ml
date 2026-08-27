@@ -63,7 +63,9 @@ def main():
         accelerator_config={"gradient_accumulation_steps": 2},
     )
 
-    trainer.fit(train_loader, val_loader, epochs=10, metrics={"acc": Accuracy()})
+    trainer.fit(
+        train_loader, val_loader, epochs=10, metrics={"acc": Accuracy(num_classes=10)}
+    )
 
     end_time = time.time()
 

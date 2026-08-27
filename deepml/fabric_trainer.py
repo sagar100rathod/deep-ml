@@ -109,6 +109,7 @@ class FabricTrainer(BaseLearner):
         val_loader: torch.utils.data.DataLoader = None,
         epochs: int = 10,
         save_model_after_every_epoch: int = 5,
+        steps_per_epoch: Optional[int] = None,
         metrics: Dict[str, torch.nn.Module] = None,
         gradient_accumulation_steps: int = 1,
         gradient_clip_value: Optional[float] = None,
@@ -130,8 +131,11 @@ class FabricTrainer(BaseLearner):
             train_loader: DataLoader for training data.
             val_loader: DataLoader for validation data. Defaults to None.
             epochs: Total number of epochs to train. Defaults to 10.
-            save_model_after_every_epoch: Frequency (in epochs) to save model checkpoints.
-                Defaults to 5.
+            save_model_after_every_epoch: Frequency (in epochs) to save epoch-level
+                model checkpoints. Checkpoint name: ``epoch_{N}_model.pt``. Defaults to 5.
+            steps_per_epoch: Number of batches per epoch. Use with streaming /
+                IterableDatasets (no fixed length) or to define a synthetic epoch over
+                very large datasets. Defaults to None (full DataLoader per epoch).
             metrics: Dictionary mapping metric names to metric instances. Each metric
                 must be a torch.nn.Module with a forward() method. Defaults to None.
             gradient_accumulation_steps: Number of steps to accumulate gradients before
@@ -167,6 +171,7 @@ class FabricTrainer(BaseLearner):
             val_loader=val_loader,
             epochs=epochs,
             save_model_after_every_epoch=save_model_after_every_epoch,
+            steps_per_epoch=steps_per_epoch,
             metrics=metrics,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_clip_value=gradient_clip_value,
@@ -204,6 +209,7 @@ class FabricTrainer(BaseLearner):
         val_loader: torch.utils.data.DataLoader = None,
         epochs: int = 10,
         save_model_after_every_epoch: int = 5,
+        steps_per_epoch: Optional[int] = None,
         metrics: Dict[str, torch.nn.Module] = None,
         gradient_accumulation_steps: int = 1,
         gradient_clip_value: Optional[float] = None,
@@ -227,8 +233,8 @@ class FabricTrainer(BaseLearner):
             train_loader: DataLoader for training data.
             val_loader: DataLoader for validation data. Defaults to None.
             epochs: Total number of epochs to train. Defaults to 10.
-            save_model_after_every_epoch: Frequency (in epochs) to save model checkpoints.
-                Defaults to 5.
+            save_model_after_every_epoch: Frequency (in epochs) to save epoch-level
+                model checkpoints. Checkpoint name: ``epoch_{N}_model.pt``. Defaults to 5.
             metrics: Dictionary mapping metric names to metric instances. Each metric
                 must be a torch.nn.Module with a forward() method. Defaults to None.
             gradient_accumulation_steps: Number of steps to accumulate gradients before
@@ -271,6 +277,11 @@ class FabricTrainer(BaseLearner):
             gradient_accumulation_steps > 0
         ), "Accumulation steps should be greater than 0"
 
+        if steps_per_epoch is not None and hasattr(train_loader, "__len__"):
+            assert steps_per_epoch <= len(
+                train_loader
+            ), "steps_per_epoch must not exceed len(train_loader)"
+
         if gradient_clip_value is not None and gradient_clip_max_norm is not None:
             raise ValueError(
                 "Only one of gradient_clip_value or gradient_clip_max_norm should be passed."
@@ -301,6 +312,11 @@ class FabricTrainer(BaseLearner):
                 )
 
         model, optimizer = fabric.setup(self._model, self._optimizer)
+
+        if metrics:
+            for m in metrics.values():
+                if getattr(m, "is_stateful", False):
+                    m.to(fabric.device)
 
         if load_optimizer_state:
             FabricTrainer.load_optimizer_state(optimizer, state_dict)
@@ -363,6 +379,7 @@ class FabricTrainer(BaseLearner):
                 gradient_accumulation_steps=gradient_accumulation_steps,
                 gradient_clip_value=gradient_clip_value,
                 gradient_clip_max_norm=gradient_clip_max_norm,
+                steps_per_epoch=steps_per_epoch,
             )
 
             # evaluation
@@ -466,7 +483,8 @@ class FabricTrainer(BaseLearner):
         gradient_accumulation_steps: int = 1,
         gradient_clip_value: Optional[float] = None,
         gradient_clip_max_norm: Optional[float] = None,
-    ) -> OrderedDict[str, float]:
+        steps_per_epoch: Optional[int] = None,
+    ):
         """Runs a single training epoch with gradient accumulation and distributed training support.
 
         Args:
@@ -514,8 +532,13 @@ class FabricTrainer(BaseLearner):
             # Global metrics dict for tracking metrics from all processes,
             # separate history is used to track metrics across multiple calls to fit method
             global_metrics_dict = FabricTrainer.init_metrics(metrics)
+            _tqdm_total = (
+                steps_per_epoch
+                if steps_per_epoch is not None
+                else (len(train_loader) if hasattr(train_loader, "__len__") else None)
+            )
             training_progress_bar = tqdm(
-                total=len(train_loader),
+                total=_tqdm_total,
                 desc="{:12s}".format("Training"),
                 dynamic_ncols=True,
             )
@@ -525,11 +548,18 @@ class FabricTrainer(BaseLearner):
         # Nullify the parameter gradients
         optimizer.zero_grad(set_to_none=True)
 
+        _loader_len = len(train_loader) if hasattr(train_loader, "__len__") else None
+
         try:
             for batch_index, (x, y) in enumerate(train_loader):
 
+                _epoch_end = (
+                    steps_per_epoch is not None and batch_index + 1 >= steps_per_epoch
+                )
                 is_accumulating = (batch_index + 1) % gradient_accumulation_steps != 0
-                is_last_batch = (batch_index + 1) == len(train_loader)
+                is_last_batch = _epoch_end or (
+                    _loader_len is not None and (batch_index + 1) == _loader_len
+                )
 
                 # If we are accumulating gradients, we do not need to step the optimizer
                 with fabric.no_backward_sync(model, enabled=is_accumulating):
@@ -588,7 +618,7 @@ class FabricTrainer(BaseLearner):
                     }
 
                     FabricTrainer.update_metrics_with_simple_moving_average(
-                        reduced_batch_metrics, global_metrics_dict, step
+                        reduced_batch_metrics, global_metrics_dict, step, metrics
                     )
                     training_progress_bar.set_postfix(
                         {
@@ -617,6 +647,9 @@ class FabricTrainer(BaseLearner):
 
                     # Nullify the parameter gradients
                     optimizer.zero_grad(set_to_none=True)
+
+                if _epoch_end:
+                    break
         finally:
             if fabric.is_global_zero:
                 training_progress_bar.close()

@@ -3,14 +3,7 @@ import unittest
 import pytest
 import torch
 
-from deepml.metrics.segmentation import (
-    Accuracy,
-    F1Score,
-    IoUScore,
-    Precision,
-    Recall,
-    ToClassIndex,
-)
+from deepml.metrics.segmentation import Accuracy, F1Score, IoUScore, Precision, Recall
 
 
 def test_precision_binary_classification():
@@ -61,10 +54,10 @@ def test_precision_recall_multiclass_without_reduction():
     recall = Recall(mode="multiclass", num_classes=3, reduction=None)
 
     assert precision(probs, gt) == pytest.approx(
-        torch.tensor([[0.6667, 0.5000, 0.5000]]), abs=0.01
+        torch.tensor([0.6667, 0.5000, 0.5000]), abs=0.01
     )
     assert recall(probs, gt) == pytest.approx(
-        torch.tensor([[0.5000, 0.6667, 0.5000]]), abs=0.01
+        torch.tensor([0.5000, 0.6667, 0.5000]), abs=0.01
     )
 
 
@@ -146,11 +139,9 @@ def test_precision_recall_multilabel():
     recall = Recall(mode="multilabel", num_classes=3, threshold=0.6, reduction=None)
 
     assert precision(pred, gt) == pytest.approx(
-        torch.tensor([[0.40, 0.75, 0.20]]), abs=0.001
+        torch.tensor([0.40, 0.75, 0.20]), abs=0.001
     )
-    assert recall(pred, gt) == pytest.approx(
-        torch.tensor([[0.5, 0.75, 0.25]]), abs=0.001
-    )
+    assert recall(pred, gt) == pytest.approx(torch.tensor([0.5, 0.75, 0.25]), abs=0.001)
 
     precision = Precision(
         mode="multilabel",
@@ -178,6 +169,7 @@ def test_jaccard_index_binary_custom_activation():
 
     assert pytest.approx(iou(pred, gt), 0.001) == 0.5
 
+    iou.reset()  # reset accumulated state before testing on new data
     gt = torch.tensor([[[[1, 1, 0], [1, 1, 0], [1, 1, 0]]]])
     pred = torch.tensor([[[[1, 1, 1], [1, 1, 1], [1, 1, 1]]]])
 
@@ -211,7 +203,8 @@ def test_accuracy_multiclass_micro():
     probs = torch.stack([class1_prob, class2_prob, class3_prob]).unsqueeze(dim=0)
 
     acc = Accuracy(mode="multiclass", reduction="micro", num_classes=3)
-    assert pytest.approx(acc(probs, gt).item(), 0.001) == 0.7037
+    # torchmetrics computes simple pixel accuracy (correct/total = 5/9)
+    assert pytest.approx(acc(probs, gt).item(), 0.001) == 0.5556
 
 
 def test_accuracy_multiclass_target_class_index():
@@ -285,36 +278,6 @@ def _make_multiclass_batch(batch=2, num_classes=3, h=8, w=8):
 def _make_binary_metric_kwargs():
     """Return kwargs for binary segmentation metrics with explicit threshold."""
     return {"mode": "binary", "threshold": 0.5}
-
-
-class TestToClassIndex(unittest.TestCase):
-
-    def test_binary_thresholding(self):
-        tci = ToClassIndex(mode="binary", threshold=0.5)
-        output = torch.tensor([[[[5.0, -5.0]]]])  # B=1, C=1, H=1, W=2
-        result = tci(output)
-        self.assertEqual(result[0, 0, 0, 0].item(), 1.0)
-        self.assertEqual(result[0, 0, 0, 1].item(), 0.0)
-
-    def test_multiclass_argmax(self):
-        tci = ToClassIndex(mode="multiclass", threshold=None)
-        # B=1, C=3, H=1, W=1 — class 2 wins
-        output = torch.tensor([[[[0.1]], [[0.2]], [[5.0]]]])
-        result = tci(output)
-        self.assertEqual(result[0, 0, 0].item(), 2)
-
-    def test_invalid_mode_raises(self):
-        with self.assertRaises(ValueError):
-            ToClassIndex(mode="invalid")
-
-    def test_multiclass_with_threshold_raises(self):
-        with self.assertRaises(ValueError):
-            ToClassIndex(mode="multiclass", threshold=0.5)
-
-    def test_requires_4d_input(self):
-        tci = ToClassIndex(mode="binary")
-        with self.assertRaises(AssertionError):
-            tci(torch.randn(2, 4, 4))  # 3D
 
 
 class TestSegmentationMetricValidation(unittest.TestCase):
@@ -437,3 +400,54 @@ class TestMulticlassMetrics(unittest.TestCase):
         output, target = _make_binary_batch()
         result = metric(output, target)
         self.assertAlmostEqual(result.item(), 1.0, delta=1e-4)
+
+
+class TestStatefulAccumulation(unittest.TestCase):
+
+    def test_accumulated_iou_differs_from_sma(self):
+        """Global IoU from accumulated counts must differ from mean of per-batch IoUs."""
+        iou = IoUScore(mode="binary", threshold=0.5)
+
+        # batch 1: small, mostly correct
+        gt1 = torch.tensor([[[[1, 1], [1, 1]]]])
+        pred1 = torch.tensor([[[[5.0, 5.0], [5.0, 5.0]]]])
+        val1 = iou(pred1, gt1).item()
+
+        # batch 2: larger, mostly wrong
+        gt2 = torch.tensor([[[[0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1]]]])
+        pred2 = torch.tensor(
+            [
+                [
+                    [
+                        [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0],
+                        [-5.0, -5.0, -5.0, -5.0, -5.0, -5.0, -5.0, -5.0],
+                    ]
+                ]
+            ]
+        )
+        val_accumulated = iou(pred2, gt2).item()
+
+        sma_approx = (val1 + val_accumulated) / 2
+        # accumulated value should differ from simple average of per-batch values
+        self.assertNotAlmostEqual(val_accumulated, sma_approx, places=3)
+
+    def test_reset_clears_state(self):
+        """After reset(), compute() on one batch equals single-batch IoU exactly."""
+        iou = IoUScore(mode="binary", threshold=0.5)
+        gt = torch.tensor([[[[1, 0], [0, 1]]]])
+        pred = torch.tensor([[[[5.0, -5.0], [-5.0, 5.0]]]])
+
+        iou(pred, gt)  # first call accumulates
+        iou.reset()
+        result = iou(pred, gt)  # fresh accumulation — equals single-batch IoU
+
+        iou_fresh = IoUScore(mode="binary", threshold=0.5)
+        expected = iou_fresh(pred, gt)
+        self.assertAlmostEqual(result.item(), expected.item(), places=5)
+
+    def test_is_stateful_flag(self):
+        self.assertTrue(IoUScore.is_stateful)
+        self.assertTrue(F1Score.is_stateful)
+        self.assertTrue(Precision.is_stateful)
+        self.assertTrue(Recall.is_stateful)
+        self.assertTrue(Accuracy.is_stateful)

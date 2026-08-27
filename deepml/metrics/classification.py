@@ -1,137 +1,228 @@
-import torch
-import torch.nn.functional as F
+from typing import Optional
 
-from .commons import (
-    false_negatives,
-    false_positives,
-    multiclass_tp_fp_tn_fn,
-    true_negatives,
-    true_positives,
+import torch
+from torchmetrics.classification import (
+    BinaryAccuracy,
+    BinaryFBetaScore,
+    BinaryMatthewsCorrCoef,
+    BinaryPrecision,
+    BinaryRecall,
+    MulticlassAccuracy,
+    MulticlassFBetaScore,
+    MulticlassMatthewsCorrCoef,
+    MulticlassPrecision,
+    MulticlassRecall,
 )
 
 
-class Binarizer(torch.nn.Module):
+def _to_long(target: torch.Tensor) -> torch.Tensor:
+    return target.long() if target.is_floating_point() else target
 
-    def __init__(self, threshold=0.5):
-        super(Binarizer, self).__init__()
-        self.threshold = threshold
 
-    def forward(self, output):
-        if output.ndim == 2 and output.shape[-1] > 1:
-            # multiclass
-            probabilities, indices = torch.max(F.softmax(output, dim=1), dim=1)
-        else:
-            # binary
-            probabilities = torch.sigmoid(output)
-            indices = torch.zeros_like(probabilities)
-            indices[probabilities > self.threshold] = 1
-
-        return indices, probabilities
+def _check_multiclass_shape(output: torch.Tensor, num_classes: Optional[int]) -> None:
+    if num_classes is None and output.dim() == 2 and output.shape[-1] > 1:
+        raise ValueError(
+            f"Received predictions of shape {tuple(output.shape)}, which suggests "
+            f"multiclass input with {output.shape[-1]} classes. "
+            f"Initialize with num_classes={output.shape[-1]} for multiclass classification."
+        )
 
 
 class Accuracy(torch.nn.Module):
+    """Image-level accuracy metric.
 
-    def __init__(self, threshold=0.5):
-        super(Accuracy, self).__init__()
-        self.binarize = Binarizer(threshold)
+    Args:
+        num_classes: Number of classes. None → binary, int → multiclass.
+        threshold: Decision threshold for binary classification. Default 0.5.
+    """
 
-    def forward(self, output, target):
-        indices, _ = self.binarize(output)
-        return (indices == target).float().mean()
+    is_stateful: bool = True
+
+    def __init__(self, num_classes: Optional[int] = None, threshold: float = 0.5):
+        super().__init__()
+        self._num_classes = num_classes
+        if num_classes is None:
+            self._metric = BinaryAccuracy(threshold=threshold)
+        else:
+            self._metric = MulticlassAccuracy(num_classes=num_classes, average="macro")
+
+    def update(self, output: torch.Tensor, target: torch.Tensor) -> None:
+        _check_multiclass_shape(output, self._num_classes)
+        self._metric.update(output, _to_long(target))
+
+    def compute(self) -> torch.Tensor:
+        return self._metric.compute()
+
+    def reset(self) -> None:
+        self._metric.reset()
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        self.update(output, target)
+        return self.compute()
 
 
 class Precision(torch.nn.Module):
-    def __init__(self, threshold=0.5, epsilon=1e-6):
-        super(Precision, self).__init__()
-        self.binarize = Binarizer(threshold)
-        self.epsilon = epsilon
+    """Image-level precision metric.
 
-    def forward(self, output, target):
-        indices, probabilities = self.binarize(output)
+    Args:
+        num_classes: Number of classes. None → binary, int → multiclass.
+        threshold: Decision threshold for binary classification. Default 0.5.
+        zero_division: Value returned on zero division. Default 0.0.
+    """
 
-        if output.shape[-1] > 1:
-            # multiclass
-            tp, fp, _, _ = multiclass_tp_fp_tn_fn(indices, target)
+    is_stateful: bool = True
+
+    def __init__(
+        self,
+        num_classes: Optional[int] = None,
+        threshold: float = 0.5,
+        zero_division: float = 0.0,
+    ):
+        super().__init__()
+        self._num_classes = num_classes
+        if num_classes is None:
+            self._metric = BinaryPrecision(
+                threshold=threshold, zero_division=zero_division
+            )
         else:
-            tp = true_positives(indices, target)
-            fp = false_positives(indices, target)
+            self._metric = MulticlassPrecision(
+                num_classes=num_classes, average="macro", zero_division=zero_division
+            )
 
-        return tp / (tp + fp + self.epsilon)
+    def update(self, output: torch.Tensor, target: torch.Tensor) -> None:
+        _check_multiclass_shape(output, self._num_classes)
+        self._metric.update(output, _to_long(target))
+
+    def compute(self) -> torch.Tensor:
+        return self._metric.compute()
+
+    def reset(self) -> None:
+        self._metric.reset()
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        self.update(output, target)
+        return self.compute()
 
 
 class Recall(torch.nn.Module):
-    def __init__(self, threshold=0.5, epsilon=1e-6):
-        super(Recall, self).__init__()
-        self.binarize = Binarizer(threshold)
-        self.epsilon = epsilon
+    """Image-level recall metric.
 
-    def forward(self, output, target):
-        indices, probabilities = self.binarize(output)
+    Args:
+        num_classes: Number of classes. None → binary, int → multiclass.
+        threshold: Decision threshold for binary classification. Default 0.5.
+        zero_division: Value returned on zero division. Default 0.0.
+    """
 
-        if output.shape[-1] > 1:
-            # multiclass
-            tp, _, _, fn = multiclass_tp_fp_tn_fn(indices, target)
+    is_stateful: bool = True
+
+    def __init__(
+        self,
+        num_classes: Optional[int] = None,
+        threshold: float = 0.5,
+        zero_division: float = 0.0,
+    ):
+        super().__init__()
+        self._num_classes = num_classes
+        if num_classes is None:
+            self._metric = BinaryRecall(
+                threshold=threshold, zero_division=zero_division
+            )
         else:
-            tp = true_positives(indices, target)
-            fn = false_negatives(indices, target)
+            self._metric = MulticlassRecall(
+                num_classes=num_classes, average="macro", zero_division=zero_division
+            )
 
-        return tp / (tp + fn + self.epsilon)
+    def update(self, output: torch.Tensor, target: torch.Tensor) -> None:
+        _check_multiclass_shape(output, self._num_classes)
+        self._metric.update(output, _to_long(target))
+
+    def compute(self) -> torch.Tensor:
+        return self._metric.compute()
+
+    def reset(self) -> None:
+        self._metric.reset()
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        self.update(output, target)
+        return self.compute()
 
 
 class FScore(torch.nn.Module):
-    def __init__(self, beta=1.0, threshold=0.5, epsilon=1e-6):
-        super(FScore, self).__init__()
-        self.beta = beta
-        self.binarize = Binarizer(threshold)
-        self.epsilon = epsilon
+    """Image-level F-beta score.
 
-    def forward(self, output, target):
-        indices, probabilities = self.binarize(output)
-        if output.shape[-1] > 1:
-            # multiclass
-            tp, fp, _, fn = multiclass_tp_fp_tn_fn(indices, target)
+    Args:
+        num_classes: Number of classes. None → binary, int → multiclass.
+        beta: Beta factor. beta=1 → F1, beta=2 → F2 (recall-weighted). Default 1.0.
+        threshold: Decision threshold for binary classification. Default 0.5.
+        zero_division: Value returned on zero division. Default 0.0.
+    """
+
+    is_stateful: bool = True
+
+    def __init__(
+        self,
+        num_classes: Optional[int] = None,
+        beta: float = 1.0,
+        threshold: float = 0.5,
+        zero_division: float = 0.0,
+    ):
+        super().__init__()
+        self._num_classes = num_classes
+        if num_classes is None:
+            self._metric = BinaryFBetaScore(
+                beta=beta, threshold=threshold, zero_division=zero_division
+            )
         else:
-            tp = true_positives(indices, target)
-            fp = false_positives(indices, target)
-            fn = false_negatives(indices, target)
+            self._metric = MulticlassFBetaScore(
+                num_classes=num_classes,
+                beta=beta,
+                average="macro",
+                zero_division=zero_division,
+            )
 
-        precision = tp / (tp + fp + self.epsilon)
-        recall = tp / (tp + fn + self.epsilon)
+    def update(self, output: torch.Tensor, target: torch.Tensor) -> None:
+        _check_multiclass_shape(output, self._num_classes)
+        self._metric.update(output, _to_long(target))
 
-        return ((1 + self.beta**2) * precision * recall) / (
-            self.beta**2 * (precision + recall)
-        )
+    def compute(self) -> torch.Tensor:
+        return self._metric.compute()
+
+    def reset(self) -> None:
+        self._metric.reset()
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        self.update(output, target)
+        return self.compute()
 
 
 class MCC(torch.nn.Module):
+    """Matthews Correlation Coefficient — useful for imbalanced datasets.
+
+    Args:
+        num_classes: Number of classes. None → binary, int → multiclass.
+        threshold: Decision threshold for binary classification. Default 0.5.
     """
-    Matthews correlation coefficient
-    The metric useful for imbalanced dataset.
 
-    Check more info at https://en.wikipedia.org/wiki/Matthews_correlation_coefficient
-    """
+    is_stateful: bool = True
 
-    def __init__(self, threshold=0.5, epsilon=1e-6):
-        super(MCC, self).__init__()
-        self.binarize = Binarizer(threshold)
-        self.epsilon = epsilon
-
-    def forward(self, output, target):
-        indices, probabilities = self.binarize(output)
-        if output.shape[-1] > 1:
-            # multiclass
-            tp, fp, tn, fn = multiclass_tp_fp_tn_fn(indices, target)
+    def __init__(self, num_classes: Optional[int] = None, threshold: float = 0.5):
+        super().__init__()
+        self._num_classes = num_classes
+        if num_classes is None:
+            self._metric = BinaryMatthewsCorrCoef(threshold=threshold)
         else:
-            tp = true_positives(indices, target)
-            tn = true_negatives(indices, target)
-            fp = false_positives(indices, target)
-            fn = false_negatives(indices, target)
+            self._metric = MulticlassMatthewsCorrCoef(num_classes=num_classes)
 
-        numerator = (tp * tn) - (fp * fn)
-        denominator = torch.sqrt(
-            torch.tensor(
-                (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn), dtype=torch.float
-            )
-        )
+    def update(self, output: torch.Tensor, target: torch.Tensor) -> None:
+        _check_multiclass_shape(output, self._num_classes)
+        self._metric.update(output, _to_long(target))
 
-        return numerator / (denominator + self.epsilon)
+    def compute(self) -> torch.Tensor:
+        return self._metric.compute()
+
+    def reset(self) -> None:
+        self._metric.reset()
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        self.update(output, target)
+        return self.compute()

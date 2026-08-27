@@ -12,14 +12,6 @@ deepml.metrics.classification module
    :undoc-members:
    :show-inheritance:
 
-deepml.metrics.commons module
------------------------------
-
-.. automodule:: deepml.metrics.commons
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 deepml.metrics.segmentation module
 ----------------------------------
 
