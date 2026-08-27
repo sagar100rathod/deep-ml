@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pre-commit>=4.6.1,<5.0.0",
+    "pre-commit>=4.6.2,<5.0.0",
     "pytest>=8.0.0,<9.0.0",
     "pytest-cov>=7.1.0,<8.0.0",
     "black[jupyter]>=25.1.0,<26.0.0",
@@ -68,5 +68,5 @@ line_length = 88
 
 [dependency-groups]
 dev = [
-    "autoflake (>=2.3.3,<3.0.0)"
+    "autoflake (>=2.4.0,<3.0.0)"
 ]
